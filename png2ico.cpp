@@ -113,7 +113,8 @@ bool checkTransparent3(png_bytep, png_data&)
   return false;
 };
 
-void convertToIndexed(png_data& img, bool hasAlpha)
+//returns true if input had too many colors
+bool convertToIndexed(png_data& img, bool hasAlpha)
 {
   img.palette=(png_colorp)malloc(sizeof(png_color)*256);
   img.num_palette=0;
@@ -183,6 +184,8 @@ void convertToIndexed(png_data& img, bool hasAlpha)
   int transLineLen=andMaskLineLen(img.width);
   int transLinePad=transLineLen - ((img.width+7)/8);
   img.transMap=(png_bytepp)malloc(img.height*sizeof(png_bytep));
+
+  bool tooManyColors=false;
   
   //second pass: convert RGB to palette entries
   //no actual color reduction is performed. Palette entries are assigned on a
@@ -225,7 +228,7 @@ void convertToIndexed(png_data& img, bool hasAlpha)
           img.palette[palentry].blue=pixel[2];
           ++img.num_palette;
         }
-        else palentry=0;
+        else {tooManyColors=true; palentry=0;};
         mapQuadToPalEntry[quad]=palentry;
       };
 
@@ -235,6 +238,8 @@ void convertToIndexed(png_data& img, bool hasAlpha)
 
     for(int i=0; i<transLinePad; ++i) *transPtr++ = 0;
   };
+  
+  return tooManyColors;
 };
 
 
@@ -335,7 +340,10 @@ int main(int argc, char* argv[])
     }
     else
     {
-      convertToIndexed(data, ((color_type & PNG_COLOR_MASK_ALPHA)!=0));
+      if (convertToIndexed(data, ((color_type & PNG_COLOR_MASK_ALPHA)!=0)))
+      {
+        fprintf(stderr,"%s: Too many colors! Excess colors mapped to black!\n",argv[i]);
+      };
     };  
     
     pngdata.push_back(data);
