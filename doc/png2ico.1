@@ -74,11 +74,14 @@ indexed images before using them with
 \fBpng2ico\fP. \fBpng2ico\fP works just fine with RGB images, as long as the
 number of colors actually used in the image does not exceed 256.
 
-Some programs sometimes ignore the
-transparency mask and determine transparency using the color value of a pixel.
-To make sure that transparency works properly even in those situations,
-\fBpng2ico\fP uses palette entry 0 exlusively for transparent pixels. This
-effectively reduces the number of colors that you can use in an icon to 255.
+The handling of the transparency mask is very inconsistent in programs.
+The same program will sometimes interpret it differently depending on context.
+\fBpng2ico\fP takes precautions to make sure that the icon will always
+look the same. For doing this, \fBpng2ico\fP
+uses one palette entry for black (0,0,0) and one 
+palette entry for white (255,255,255), even if the icon has not a single
+black or white pixel. This means that of the 256 colors you can use in an
+icon image, only 254 can be chosen freely.
 
 .SH AUTHOR
 Matthias S. Benkmann <matthias@winterdrache.de>.
