@@ -1,0 +1,20 @@
+STLPORT_DIR=c:\devel\Bc55\stlport-4.0\stlport
+
+
+all: png2ico.exe
+
+zlib\zlib.lib:
+     cd zlib
+     make -f ..\makezlib.bcc32
+     cd ..
+
+libpng\libpng.lib: zlib\zlib.lib
+     cd libpng
+     copy ..\zlib\zlib.lib .
+     make -f scripts\makefile.bc32
+     cd ..
+
+png2ico.exe: libpng\libpng.lib zlib\zlib.lib
+     bcc32 -Izlib -Ilibpng -I$(STLPORT_DIR) png2ico.cpp libpng\libpng.lib zlib\zlib.lib
+
+

@@ -1,0 +1,59 @@
+The following instructions describe how to build png2ico under Windows,
+using Borland C++ 5.5 (which can be downloaded free of charge). If you
+manage to build png2ico with a different Windows compiler, please send me
+appropriate build instructions.
+
+1. Preconditions
+
+1.1 STLport
+
+png2ico needs the hash_map class which is not included in the BC++ 5.5
+package by default. You can install STLport (www.stlport.org) to overcome
+this. I have had no trouble installing STLport 4.0 but later versions didn't
+work for me.
+
+Note that you should not add a -I line to bcc32.cfg. If you do this, libpng
+and/or zlib may fail to build. Instead, change the STLPORT_DIR line in
+makefile.bcc32 according to your installation.
+
+1.2 libpng
+
+png2ico needs libpng (www.libpng.org). I have successfully used version
+1.2.3 for building png2ico. Later versions may or may not work.
+Extract libpng into a directory named libpng inside the directory where
+png2ico.cpp is located, so that from png2ico.cpp's directory, the path
+libpng\png.h is valid.
+
+1.3 zlib
+
+libpng needs zlib (www.zlib.org). I have successfully used version 1.1.4
+for building libpng 1.2.3.
+Extract zlib into a directory zlib so that from the directory where
+png2ico.cpp is located, zlib's header is accessible as zlib\zlib.h.
+
+
+2. Building
+
+I assume that the Borland build tools are all in the PATH. You should
+especially make sure that the program "make" found through PATH is the
+proper one.
+
+Now start the build with the command
+
+  make -f makefile.bcc32
+
+If you set up everything properly, this will build zlib, then libpng, then
+png2ico.exe.
+
+
+3. Troubleshooting
+
+If you encounter problems AND have solutions for them, I'll be happy to
+add them to this file if you mail me.
+If you have only problems without solutions, I'm sorry, but you're on your
+own. I can't help you. I was pretty happy myself when I finally managed to
+compile png2ico under Windows. I do all my development under Linux and have
+only little experience with build tools under Windows.
+If you absolutely can't get it to work, just use the precompiled .exe file.
+
+
