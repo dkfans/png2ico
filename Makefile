@@ -12,7 +12,7 @@ DEBUG=-g
 all: png2ico
 
 png2ico: png2ico.cpp
-	$(CXX) $(CPPFLAGS) $(DEBUG) $(INCLUDES) $(LDFLAGS) -o $@ $< -lpng -lz -lm
+	$(CXX) $(CXXFLAGS) $(DEBUG) $(INCLUDES) $(LDFLAGS) -o $@ $< -lpng -lz -lm
 
 doc/png2ico.txt: doc/man1/png2ico.1
 	man -M ./doc png2ico |sed  -e $$'s/.\b\\(.\\)/\\1/g' -e 's/\(.*\)/\1'$$'\r/' >$@
