@@ -17,10 +17,18 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include <cstdio>
 #include <vector>
+
+#if __GNUC__ > 2
+#include <ext/hash_map>
+#else
 #include <hash_map>
+#endif
+
 #include <png.h>
 
 using namespace std;
+namespace __gnu_cxx{};
+using namespace __gnu_cxx;
 
 const int word_max=65535;
 const int transparency_threshold=128;
@@ -227,7 +235,8 @@ int main(int argc, char* argv[])
   
   vector<png_data> pngdata;
   
-  for (int i=2; i<argc; ++i)
+  //i is static because used in a setjmp() block
+  for (static int i=2; i<argc; ++i)
   {
     FILE* pngfile=fopen(argv[i],"rb");
     if (pngfile==NULL)  {perror(argv[i]); exit(1);};
@@ -395,7 +404,7 @@ int main(int argc, char* argv[])
       int outbyte=0;
       for (unsigned i=0; i<img->width;++i)
       {
-        if (transparent(img,row[i])) ++outbyte;
+        if (transparent(&*img,row[i])) ++outbyte;
         if (++count8==8)
         {
           writeByte(outfile,outbyte);
