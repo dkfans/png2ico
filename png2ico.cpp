@@ -178,9 +178,10 @@ void convertToIndexed(png_data& img, bool hasAlpha)
       {
         if (img.num_palette<256)
         {
-          img.palette[img.num_palette].red=pixel[0];
-          img.palette[img.num_palette].green=pixel[1];
-          img.palette[img.num_palette].blue=pixel[2];
+          palentry=img.num_palette;
+          img.palette[palentry].red=pixel[0];
+          img.palette[palentry].green=pixel[1];
+          img.palette[palentry].blue=pixel[2];
           ++img.num_palette;
         }
         else palentry=0;
