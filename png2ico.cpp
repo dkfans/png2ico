@@ -53,7 +53,7 @@ using namespace __gnu_cxx;
 const int word_max=65535;
 const int transparency_threshold=196;
 const int color_reduce_warning_threshold=512; //maximum quadratic euclidean distance in RGB color space that a palette color may have to a source color assigned to it before a warning is issued
-const unsigned int slow_reduction_warn_threshold=1024; //number of colors in source image that triggers the warning that the reduction may take a while
+const unsigned int slow_reduction_warn_threshold=262144; //number of colors in source image times number of colors in target image that triggers the warning that the reduction may take a while
 
 void writeWord(FILE* f, int word)
 {
@@ -195,7 +195,7 @@ bool convertToIndexed(png_data& img, bool hasAlpha)
   mapQuadToPalEntry[255<<24]=0; //map (non-transparent) black to entry 0
   mapQuadToPalEntry[255+(255<<8)+(255<<16)+(255<<24)]=1; //map (non-transparent) white to entry 1
   
-  if (mapQuadToPalEntry.size()>slow_reduction_warn_threshold)
+  if (mapQuadToPalEntry.size()*img.requested_colors>slow_reduction_warn_threshold)
   {
     fprintf(stdout,"Please be patient. My color reduction algorithm is really slow.\n");
   };
@@ -418,7 +418,7 @@ int pack(png_bytep row,int width,int nbits)
 void usage()
 {
   fprintf(stderr,version"\n");
-  fprintf(stderr,"USAGE: png2ico icofile pngfile1 [pngfile2 ...]\n");
+  fprintf(stderr,"USAGE: png2ico icofile [--colors <num>] pngfile1 [pngfile2 ...]\n");
   exit(1);
 };
 
