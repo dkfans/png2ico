@@ -66,9 +66,6 @@ struct png_data
   png_uint_32 width, height;
   png_colorp palette;
   int num_palette;
-  png_bytep trans;
-  int num_trans;
-  png_color_16p trans_values;
 };
 
 typedef bool (*checkTransparent_t)(png_bytep, png_data&);
@@ -76,13 +73,6 @@ typedef bool (*checkTransparent_t)(png_bytep, png_data&);
 bool checkTransparent1(png_bytep data, png_data&)
 {
   return (data[3]<transparency_threshold);
-};
-
-bool checkTransparent2(png_bytep data, png_data& img)
-{
-  return (data[0]==img.trans_values->red &&
-          data[1]==img.trans_values->green &&
-          data[2]==img.trans_values->blue);
 };
 
 bool checkTransparent3(png_bytep, png_data&)
@@ -100,20 +90,18 @@ void convertToIndexed(png_data& img, bool hasAlpha)
   if (!hasAlpha)
   {
     bytesPerPixel=3;
-    if (img.trans_values!=NULL) 
-      checkTrans=checkTransparent2;
-    else
-      checkTrans=checkTransparent3;  
+    checkTrans=checkTransparent3;  
   };
   
-  //first pass: gather all colors, find out if transparency is used and make sure
+  //first pass: gather all colors, check if color (0,0,0) used, make sure
   //alpha channel (if present) contains only 0 and 255
-  //if an alpha channel is present, set all transparent pixels to 0,0,0,0
+  //if an alpha channel is present, set all transparent pixels to RGBA (0,0,0,0)
   //transparent pixels will already be mapped to palette entry 0, non-transparent
   //pixels will not get a mapping yet (-1)
   hash_map<unsigned int,signed int> mapQuadToPalEntry;
   png_bytep* row_pointers=png_get_rows(img.png_ptr, img.info_ptr);
-  bool transparencyUsed=false;
+  
+  bool blackUsed=false;
   for (int y=img.height-1; y>=0; --y)
   {
     png_bytep pixel=row_pointers[y];
@@ -121,7 +109,7 @@ void convertToIndexed(png_data& img, bool hasAlpha)
     {
       unsigned int quad=pixel[0]+(pixel[1]<<8)+(pixel[2]<<16);
       bool trans=(*checkTrans)(pixel,img);
-      transparencyUsed=(transparencyUsed||trans);
+     
       if (hasAlpha) 
       {
         if (trans)
@@ -133,6 +121,8 @@ void convertToIndexed(png_data& img, bool hasAlpha)
           quad=0;
         }
         else pixel[3]=255;
+        
+        blackUsed|=(quad==0);
         
         quad+=(pixel[3]<<24);
       };
@@ -146,25 +136,18 @@ void convertToIndexed(png_data& img, bool hasAlpha)
     };  
   };
   
-  if (transparencyUsed)
+  img.num_palette=1;
+  img.palette[0].red=0;
+  img.palette[0].green=0;
+  img.palette[0].blue=0;
+  
+  if (blackUsed)
   {
-    img.num_trans=1;
-    img.num_palette=1;
-    img.trans=(png_bytep)malloc(1);
-    img.trans[0]=0;
-    if (hasAlpha)
-    {
-      img.palette[0].red=0;
-      img.palette[0].green=0;
-      img.palette[0].blue=0;
-    }
-    else
-    {
-      //trans_values has to be non-NULL or transparencyUsed would be false
-      img.palette[0].red=img.trans_values->red;
-      img.palette[0].green=img.trans_values->green;
-      img.palette[0].blue=img.trans_values->blue;
-    };
+    ++img.num_palette;
+    img.palette[1].red=0;
+    img.palette[1].green=0;
+    img.palette[1].blue=0;
+    mapQuadToPalEntry[255<<24]=1;
   };
 
   //second pass: convert RGB to palette entries
@@ -172,6 +155,7 @@ void convertToIndexed(png_data& img, bool hasAlpha)
   //"first come, first served" basis. Once all entries are assigned, new colors
   //get palette entry 0
   //NOTE that transparent pixels have already been mapped to entry 0
+  //and if (0,0,0) is used for a non-transparent pixel it is already mapped to entry 1
   for (int y=img.height-1; y>=0; --y)
   {
     png_bytep row=row_pointers[y];
@@ -200,12 +184,6 @@ void convertToIndexed(png_data& img, bool hasAlpha)
       pixel+=bytesPerPixel;
     };  
   };
-};
-
-bool transparent(const png_data* img, int palette_entry)
-{
-  if (palette_entry >= img->num_trans||palette_entry >= img->num_palette) return false;
-  return (img->trans[palette_entry]<transparency_threshold);
 };
 
 int andMaskLineLen(int width)
@@ -282,7 +260,7 @@ int main(int argc, char* argv[])
     
     png_init_io(data.png_ptr, pngfile);
     png_set_sig_bytes(data.png_ptr,8);
-    int trafo=PNG_TRANSFORM_PACKING|PNG_TRANSFORM_STRIP_16;
+    int trafo=PNG_TRANSFORM_PACKING|PNG_TRANSFORM_STRIP_16|PNG_TRANSFORM_EXPAND;
     png_read_png(data.png_ptr, data.info_ptr, trafo , NULL);
 
     int bit_depth, color_type, interlace_type, compression_type, filter_method;
@@ -307,21 +285,10 @@ int main(int argc, char* argv[])
       exit(1);
     };
     
-    if (!png_get_tRNS(data.png_ptr, data.info_ptr,&data.trans, &data.num_trans,
-                      &data.trans_values))
-    {
-      data.trans=NULL;
-      data.num_trans=0;
-      data.trans_values=NULL;
-    };
-    
     if (color_type==PNG_COLOR_TYPE_PALETTE)
     {
-      if (!png_get_PLTE(data.png_ptr, data.info_ptr, &data.palette, &data.num_palette))
-      {
-        fprintf(stderr,"%s: Paletted file without PLTE?????\n",argv[i]);
-        exit(1);
-      };
+      fprintf(stderr,"This can't happen. PNG_TRANSFORM_EXPAND transforms image to RGB.\n");
+      exit(1);
     }
     else
     {
@@ -374,7 +341,7 @@ int main(int argc, char* argv[])
     writeDWord(outfile,(andMaskLineLen(img->width)+xorMaskLineLen(img->width))*img->height);  //biSizeImage
     writeDWord(outfile,0);  //biXPelsPerMeter
     writeDWord(outfile,0);  //biYPelsPerMeter
-    writeDWord(outfile,256); //biClrUsed (bmp.txt says to use 0 here but putting in the right value can't hurt)
+    writeDWord(outfile,0); //biClrUsed (MUST BE 0 ACCORDING TO bmp.txt!!! I tried putting the real number here, but this breaks icons in some places)
     writeDWord(outfile,0);   //biClrImportant
     for (int i=0; i<256; ++i)
     {
@@ -404,7 +371,7 @@ int main(int argc, char* argv[])
       int outbyte=0;
       for (unsigned i=0; i<img->width;++i)
       {
-        if (transparent(&*img,row[i])) ++outbyte;
+        if (row[i]==0) ++outbyte; //row[i]==0 test works because all transparent pixels were mapped to 0
         if (++count8==8)
         {
           writeByte(outfile,outbyte);
@@ -419,3 +386,4 @@ int main(int argc, char* argv[])
   
   fclose(outfile);
 };
+
