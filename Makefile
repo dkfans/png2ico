@@ -1,4 +1,5 @@
-CPPFLAGS=-W -Wall -O2
+CPPFLAGS=-W -Wall -O2 -finline-functions
+#CPPFLAGS=-O0 -W -Wall
 DEBUG=-g
 
 all: png2ico
