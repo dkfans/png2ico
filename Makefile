@@ -15,5 +15,5 @@ release: clean png2ico doc/png2ico.txt
 	zip png2ico/png2ico-win.zip png2ico/{LICENSE,README,doc/png2ico.txt,png2ico.exe} 
 
 clean:
-	rm -f png2ico *~ doc/*~ *.bak png2ico-src.tar.gz png2ico-win.zip
+	rm -f png2ico *~ doc/*~ *.bak png2ico-src.tar.gz png2ico-win.zip doc/png2ico.txt
 
