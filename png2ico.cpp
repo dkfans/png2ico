@@ -15,6 +15,23 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
+/*
+Notes about transparent and inverted pixels:
+ Handling of transparent pixels is inconsistent in Windows. Sometimes a
+ pixel with an AND mask value of 1 is just transparent (i.e. its color 
+ value is ignored), sometimes the color value is XORed with the background to
+ give some kind of inverted effect. A closer look at bmp.txt suggests that
+ the latter behaviour is the correct one but because it often doesn't happen
+ it's de facto undefined behaviour.
+ Furthermore, sometimes the AND mask entry seems to be interpreted as a
+ color index, i.e. a value of 1 will AND the background with color 1.
+ Conclusion: The most robust solution seems to be:
+               -color 0 always 0,0,0
+               -color 1 always 255,255,255
+               -all transparent pixels get color 0
+*/
+
+
 #include <cstdio>
 #include <vector>
 
@@ -33,7 +50,7 @@ namespace __gnu_cxx{};
 using namespace __gnu_cxx;
 
 const int word_max=65535;
-const int transparency_threshold=128;
+const int transparency_threshold=196;
 
 void writeWord(FILE* f, int word)
 {
@@ -60,6 +77,17 @@ void writeByte(FILE* f, int byte)
   if (fwrite(data,1,1,f)!=1) {perror("Write error"); exit(1);};
 };
 
+int andMaskLineLen(int width)
+{
+  int len=(width+7)>>3;
+  return (len+3)&~3;
+};
+
+int xorMaskLineLen(int width)
+{
+  return (width+3)&~3;
+};
+
 struct png_data
 {
   png_structp png_ptr;
@@ -67,7 +95,10 @@ struct png_data
   png_infop end_info;
   png_uint_32 width, height;
   png_colorp palette;
+  png_bytepp transMap;
   int num_palette;
+  png_data():png_ptr(NULL),info_ptr(NULL),end_info(NULL),width(0),height(0),
+             palette(NULL),transMap(NULL),num_palette(0){};
 };
 
 typedef bool (*checkTransparent_t)(png_bytep, png_data&);
@@ -95,7 +126,7 @@ void convertToIndexed(png_data& img, bool hasAlpha)
     checkTrans=checkTransparent3;  
   };
   
-  //first pass: gather all colors, check if color (0,0,0) used, make sure
+  //first pass: gather all colors, make sure
   //alpha channel (if present) contains only 0 and 255
   //if an alpha channel is present, set all transparent pixels to RGBA (0,0,0,0)
   //transparent pixels will already be mapped to palette entry 0, non-transparent
@@ -103,7 +134,6 @@ void convertToIndexed(png_data& img, bool hasAlpha)
   hash_map<unsigned int,signed int> mapQuadToPalEntry;
   png_bytep* row_pointers=png_get_rows(img.png_ptr, img.info_ptr);
   
-  bool blackUsed=false;
   for (int y=img.height-1; y>=0; --y)
   {
     png_bytep pixel=row_pointers[y];
@@ -124,8 +154,6 @@ void convertToIndexed(png_data& img, bool hasAlpha)
         }
         else pixel[3]=255;
         
-        blackUsed|=(quad==0);
-        
         quad+=(pixel[3]<<24);
       };
       
@@ -138,34 +166,51 @@ void convertToIndexed(png_data& img, bool hasAlpha)
     };  
   };
   
-  img.num_palette=1;
+  //always allocate entry 0 to black and entry 1 to white because
+  //sometimes AND mask is interpreted as color index
+  img.num_palette=2;
   img.palette[0].red=0;
   img.palette[0].green=0;
   img.palette[0].blue=0;
+  img.palette[1].red=255;
+  img.palette[1].green=255;
+  img.palette[1].blue=255;
   
-  if (blackUsed)
-  {
-    ++img.num_palette;
-    img.palette[1].red=0;
-    img.palette[1].green=0;
-    img.palette[1].blue=0;
-    mapQuadToPalEntry[255<<24]=1;
-  };
+  mapQuadToPalEntry[255<<24]=0; //map (non-transparent) black to entry 0
+  mapQuadToPalEntry[255+(255<<8)+(255<<16)+(255<<24)]=1; //map (non-transparent) white to entry 1
 
+  int transLineLen=andMaskLineLen(img.width);
+  int transLinePad=transLineLen - ((img.width+7)/8);
+  img.transMap=(png_bytepp)malloc(img.height*sizeof(png_bytep));
+  
   //second pass: convert RGB to palette entries
   //no actual color reduction is performed. Palette entries are assigned on a
   //"first come, first served" basis. Once all entries are assigned, new colors
   //get palette entry 0
   //NOTE that transparent pixels have already been mapped to entry 0
-  //and if (0,0,0) is used for a non-transparent pixel it is already mapped to entry 1
+  //entry 0 is always (0,0,0) 
+  //and entry 1 is always (255,255,255)
   for (int y=img.height-1; y>=0; --y)
   {
     png_bytep row=row_pointers[y];
     png_bytep pixel=row;
+    int count8=0;
+    int transbyte=0;
+    png_bytep transPtr=img.transMap[y]=(png_bytep)malloc(transLineLen);
+    
     for (unsigned i=0; i<img.width; ++i)
     {
       unsigned int quad=pixel[0]+(pixel[1]<<8)+(pixel[2]<<16);
       if (hasAlpha) quad+=(pixel[3]<<24);
+      
+      if ((*checkTrans)(pixel,img)) ++transbyte;
+      if (++count8==8)
+      {
+        *transPtr++ = transbyte;
+        count8=0;
+        transbyte=0;
+      };
+      transbyte+=transbyte; //shift left 1
       
       int palentry=mapQuadToPalEntry[quad];
       if (palentry<0)
@@ -184,20 +229,13 @@ void convertToIndexed(png_data& img, bool hasAlpha)
 
       row[i]=palentry;
       pixel+=bytesPerPixel;
-    };  
+    };
+
+    for(int i=0; i<transLinePad; ++i) *transPtr++ = 0;
   };
 };
 
-int andMaskLineLen(int width)
-{
-  int len=(width+7)>>3;
-  return (len+3)&~3;
-};
 
-int xorMaskLineLen(int width)
-{
-  return (width+3)&~3;
-};
 
 int main(int argc, char* argv[])
 {
@@ -333,7 +371,6 @@ int main(int argc, char* argv[])
   for(img=pngdata.begin(); img!=pngdata.end(); ++img)
   {
     int xorLinePad=xorMaskLineLen(img->width) - img->width;
-    int andLinePad=andMaskLineLen(img->width) - ((img->width+7)/8);
     
     writeDWord(outfile,40); //biSize
     writeDWord(outfile,img->width); //biWidth
@@ -369,21 +406,8 @@ int main(int argc, char* argv[])
     
     for (int y=img->height-1; y>=0; --y)
     {
-      png_bytep row=row_pointers[y];
-      int count8=0;
-      int outbyte=0;
-      for (unsigned i=0; i<img->width;++i)
-      {
-        if (row[i]==0) ++outbyte; //row[i]==0 test works because all transparent pixels were mapped to 0
-        if (++count8==8)
-        {
-          writeByte(outfile,outbyte);
-          count8=0;
-          outbyte=0;
-        };
-        outbyte+=outbyte; //shift left 1
-      };
-      for(int i=0; i<andLinePad; ++i) writeByte(outfile,0);
+      png_bytep transPtr=img->transMap[y];
+      if (fwrite(transPtr,andMaskLineLen(img->width),1,outfile)!=1) {perror("Write error"); exit(1);};
     };
   };
   
