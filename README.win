@@ -19,7 +19,7 @@ makefile.bcc32 according to your installation.
 1.2 libpng
 
 png2ico needs libpng (www.libpng.org). I have successfully used version
-1.2.3 for building png2ico. Later versions may or may not work.
+1.2.5 for building png2ico. Other versions may or may not work.
 Extract libpng into a directory named libpng inside the directory where
 png2ico.cpp is located, so that from png2ico.cpp's directory, the path
 libpng\png.h is valid.
@@ -27,7 +27,7 @@ libpng\png.h is valid.
 1.3 zlib
 
 libpng needs zlib (www.zlib.org). I have successfully used version 1.1.4
-for building libpng 1.2.3.
+for building libpng 1.2.5.
 Extract zlib into a directory zlib so that from the directory where
 png2ico.cpp is located, zlib's header is accessible as zlib\zlib.h.
 
