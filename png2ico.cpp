@@ -414,14 +414,17 @@ int pack(png_bytep row,int width,int nbits)
   return outIndex;
 };
 
+
+void usage()
+{
+  fprintf(stderr,version"\n");
+  fprintf(stderr,"USAGE: png2ico icofile pngfile1 [pngfile2 ...]\n");
+  exit(1);
+};
+
 int main(int argc, char* argv[])
 {
-  if (argc<3)
-  {
-    fprintf(stderr,version"\n");
-    fprintf(stderr,"USAGE: png2ico icofile pngfile1 [pngfile2 ...]\n");
-    exit(1);
-  };
+  if (argc<3) usage();
   
   if (argc-2 > word_max) 
   {
@@ -432,9 +435,10 @@ int main(int argc, char* argv[])
   vector<png_data> pngdata;
   
   static int numColors=256; //static to get rid of longjmp() clobber warning
+  static const char* outfileName=NULL;
   
   //i is static because used in a setjmp() block
-  for (static int i=2; i<argc; ++i)
+  for (static int i=1; i<argc; ++i)
   {
     if (strcmp(argv[i],"--colors")==0)
     {
@@ -454,6 +458,8 @@ int main(int argc, char* argv[])
       numColors=num;
       continue;
     };
+    
+    if (outfileName==NULL) { outfileName=argv[i]; continue; };
     
     FILE* pngfile=fopen(argv[i],"rb");
     if (pngfile==NULL)  {perror(argv[i]); exit(1);};
@@ -546,8 +552,9 @@ int main(int argc, char* argv[])
   };
   
 
+  if (outfileName==NULL || pngdata.size()<1) usage();
   
-  FILE* outfile=fopen(argv[1],"wb");
+  FILE* outfile=fopen(outfileName,"wb");
   if (outfile==NULL) {perror(argv[1]); exit(1);};
   
   writeWord(outfile,0); //idReserved
