@@ -1,4 +1,4 @@
-/* Copyright (C) 2002 Matthias S. Benkmann <m.s.b@gmx.net>
+/* Copyright (C) 2002 Matthias S. Benkmann <matthias@winterdrache.de>
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -34,6 +34,7 @@ Notes about transparent and inverted pixels:
 
 #include <cstdio>
 #include <vector>
+#include <climits>
 
 #if __GNUC__ > 2
 #include <ext/hash_map>
@@ -51,6 +52,8 @@ using namespace __gnu_cxx;
 
 const int word_max=65535;
 const int transparency_threshold=196;
+const int color_reduce_warning_threshold=512; //maximum quadratic euclidean distance in RGB color space that a palette color may have to a source color assigned to it before a warning is issued
+const unsigned int slow_reduction_warn_threshold=1024; //number of colors in source image that triggers the warning that the reduction may take a while
 
 void writeWord(FILE* f, int word)
 {
@@ -77,16 +80,7 @@ void writeByte(FILE* f, int byte)
   if (fwrite(data,1,1,f)!=1) {perror("Write error"); exit(1);};
 };
 
-int andMaskLineLen(int width)
-{
-  int len=(width+7)>>3;
-  return (len+3)&~3;
-};
 
-int xorMaskLineLen(int width)
-{
-  return (width+3)&~3;
-};
 
 struct png_data
 {
@@ -97,8 +91,22 @@ struct png_data
   png_colorp palette;
   png_bytepp transMap;
   int num_palette;
+  int requested_colors;
+  int col_bits;
   png_data():png_ptr(NULL),info_ptr(NULL),end_info(NULL),width(0),height(0),
-             palette(NULL),transMap(NULL),num_palette(0){};
+             palette(NULL),transMap(NULL),num_palette(0),requested_colors(0),col_bits(0){};
+};
+
+int andMaskLineLen(const png_data& img)
+{
+  int len=(img.width+7)>>3;
+  return (len+3)&~3;
+};
+
+int xorMaskLineLen(const png_data& img)
+{
+  int pixelsPerByte=(8/img.col_bits);
+  return ((img.width+pixelsPerByte-1)/pixelsPerByte+3)&~3;
 };
 
 typedef bool (*checkTransparent_t)(png_bytep, png_data&);
@@ -113,10 +121,16 @@ bool checkTransparent3(png_bytep, png_data&)
   return false;
 };
 
-//returns true if input had too many colors
+//returns true if color reduction resulted in at least one of the image's colors 
+//being mapped to a palette color with a quadratic distance of more than
+//color_reduce_warning_threshold
 bool convertToIndexed(png_data& img, bool hasAlpha)
 {
-  img.palette=(png_colorp)malloc(sizeof(png_color)*256);
+  int maxColors=img.requested_colors;
+  
+  size_t palSize=sizeof(png_color)*256; //must reserve space for 256 entries here because write loop in main() expects it
+  img.palette=(png_colorp)malloc(palSize);
+  memset(img.palette,0,palSize); //must initialize whole palette because write loop in main() expects it
   img.num_palette=0;
   
   checkTransparent_t checkTrans=checkTransparent1;
@@ -180,20 +194,158 @@ bool convertToIndexed(png_data& img, bool hasAlpha)
   
   mapQuadToPalEntry[255<<24]=0; //map (non-transparent) black to entry 0
   mapQuadToPalEntry[255+(255<<8)+(255<<16)+(255<<24)]=1; //map (non-transparent) white to entry 1
+  
+  if (mapQuadToPalEntry.size()>slow_reduction_warn_threshold)
+  {
+    fprintf(stdout,"Please be patient. My color reduction algorithm is really slow.\n");
+  };
+  
+  //Now fill up the palette with colors from the image by repeatedly picking the
+  //color most different from the previously picked colors and adding this to the
+  //palette. This is done to make sure that in case there are more image colors than
+  //palette entries, palette entries are not wasted on similar colors.
+  while(img.num_palette<maxColors)
+  {
+    unsigned int mostDifferentQuad=0;
+    int mdqMinDist=-1; //smallest distance to an entry in the palette for mostDifferentQuad
+    int mdqDistSum=-1; //sum over all distances to palette entries for mostDifferentQuad
+    hash_map<unsigned int,signed int>::iterator stop=mapQuadToPalEntry.end();
+    hash_map<unsigned int,signed int>::iterator iter=mapQuadToPalEntry.begin();
+    while(iter!=stop)
+    {
+      hash_map<unsigned int,signed int>::value_type& mapping=*iter++;
+      if (mapping.second<0)
+      {
+        unsigned int quad=mapping.first;
+        int red=quad&255;  //must be signed
+        int green=(quad>>8)&255;
+        int blue=(quad>>16)&255;
+        int distSum=0;
+        int minDist=INT_MAX;
+        for (int i=0; i<img.num_palette; ++i)
+        {
+          int dist=(red-img.palette[i].red);
+          dist*=dist;
+          int temp=(green-img.palette[i].green);
+          dist+=temp*temp;
+          temp=(blue-img.palette[i].blue);
+          dist+=temp*temp;
+          if (dist<minDist) minDist=dist;
+          distSum+=dist;
+        };  
+        
+        if (minDist>mdqMinDist || (minDist==mdqMinDist && distSum>mdqDistSum))
+        {
+          mostDifferentQuad=quad;
+          mdqMinDist=minDist;
+          mdqDistSum=distSum;
+        };
+      };
+    };
+    
+    if (mdqMinDist>0) //if we have found a most different quad, add it to the palette
+    {                  //and map it to the new palette entry
+      int palentry=img.num_palette;
+      img.palette[palentry].red=mostDifferentQuad&255;
+      img.palette[palentry].green=(mostDifferentQuad>>8)&255;
+      img.palette[palentry].blue=(mostDifferentQuad>>16)&255;
+      mapQuadToPalEntry[mostDifferentQuad]=palentry;
+      ++img.num_palette;
+    }
+    else break; //otherwise (i.e. all quads are mapped) the palette is finished
+  };
 
-  int transLineLen=andMaskLineLen(img.width);
+  //Now map all yet unmapped colors to the most appropriate palette entry
+  hash_map<unsigned int,signed int>::iterator stop=mapQuadToPalEntry.end();
+  hash_map<unsigned int,signed int>::iterator iter=mapQuadToPalEntry.begin();
+  while(iter!=stop)
+  {
+    hash_map<unsigned int,signed int>::value_type& mapping=*iter++;
+    if (mapping.second<0)
+    {
+      unsigned int quad=mapping.first;
+      int red=quad&255;  //must be signed
+      int green=(quad>>8)&255;
+      int blue=(quad>>16)&255;
+      int minDist=INT_MAX;
+      int bestIndex=0;
+      for (int i=0; i<img.num_palette; ++i)
+      {
+        int dist=(red-img.palette[i].red);
+        dist*=dist;
+        int temp=(green-img.palette[i].green);
+        dist+=temp*temp;
+        temp=(blue-img.palette[i].blue);
+        dist+=temp*temp;
+        if (dist<minDist) { minDist=dist; bestIndex=i; };
+      };
+      
+      mapping.second=bestIndex; 
+    };
+  };
+  
+  //Adjust all palette entries (except for 0 and 1) to be the mean of all
+  //colors mapped to it
+  for (int i=2; i<img.num_palette; ++i)
+  {
+    int red=0;
+    int green=0;
+    int blue=0;
+    int numMappings=0;
+    hash_map<unsigned int,signed int>::iterator stop=mapQuadToPalEntry.end();
+    hash_map<unsigned int,signed int>::iterator iter=mapQuadToPalEntry.begin();
+    while(iter!=stop)
+    {
+      hash_map<unsigned int,signed int>::value_type& mapping=*iter++;
+      if (mapping.second==i)
+      {
+        unsigned int quad=mapping.first;
+        red+=quad&255;
+        green+=(quad>>8)&255;
+        blue+=(quad>>16)&255;
+        ++numMappings;
+      };
+    };
+    
+    if (numMappings>0)
+    {
+      img.palette[i].red=(red+red+numMappings)/(numMappings+numMappings);
+      img.palette[i].green=(green+green+numMappings)/(numMappings+numMappings);
+      img.palette[i].blue=(blue+blue+numMappings)/(numMappings+numMappings);
+    };
+  };
+
+  //Now determine if a non-transparent source color got mapped to a target color that 
+  //has a distance that exceeds the threshold
+  bool tooManyColors=false;
+  stop=mapQuadToPalEntry.end();
+  iter=mapQuadToPalEntry.begin();
+  while(iter!=stop)
+  {
+    hash_map<unsigned int,signed int>::value_type& mapping=*iter++;
+    unsigned int quad=mapping.first;
+    if ((quad>>24)!=0) //if color is not transparent
+    {
+      int red=quad&255;
+      int green=(quad>>8)&255;
+      int blue=(quad>>16)&255;
+      int i=mapping.second;
+      int dist=(red-img.palette[i].red);
+      dist*=dist;
+      int temp=(green-img.palette[i].green);
+      dist+=temp*temp;
+      temp=(blue-img.palette[i].blue);
+      dist+=temp*temp;
+      if (dist>color_reduce_warning_threshold) tooManyColors=true;
+    };
+  };
+  
+
+  int transLineLen=andMaskLineLen(img);
   int transLinePad=transLineLen - ((img.width+7)/8);
   img.transMap=(png_bytepp)malloc(img.height*sizeof(png_bytep));
-
-  bool tooManyColors=false;
   
   //second pass: convert RGB to palette entries
-  //no actual color reduction is performed. Palette entries are assigned on a
-  //"first come, first served" basis. Once all entries are assigned, new colors
-  //get palette entry 0
-  //NOTE that transparent pixels have already been mapped to entry 0
-  //entry 0 is always (0,0,0) 
-  //and entry 1 is always (255,255,255)
   for (int y=img.height-1; y>=0; --y)
   {
     png_bytep row=row_pointers[y];
@@ -206,7 +358,7 @@ bool convertToIndexed(png_data& img, bool hasAlpha)
     {
       bool trans=((*checkTrans)(pixel,img));
       unsigned int quad=pixel[0]+(pixel[1]<<8)+(pixel[2]<<16);
-      if (hasAlpha) quad+=(pixel[3]<<24); else if (!trans) quad+=(255<<24);
+      if (!trans) quad+=(255<<24); //NOTE: alpha channel has already been set to 255 for non-transparent pixels, so this is correct even for images with alpha channel
       
       if (trans) ++transbyte; 
       if (++count8==8)
@@ -218,20 +370,6 @@ bool convertToIndexed(png_data& img, bool hasAlpha)
       transbyte+=transbyte; //shift left 1
       
       int palentry=mapQuadToPalEntry[quad];
-      if (palentry<0)
-      {
-        if (img.num_palette<256)
-        {
-          palentry=img.num_palette;
-          img.palette[palentry].red=pixel[0];
-          img.palette[palentry].green=pixel[1];
-          img.palette[palentry].blue=pixel[2];
-          ++img.num_palette;
-        }
-        else {tooManyColors=true; palentry=0;};
-        mapQuadToPalEntry[quad]=palentry;
-      };
-
       row[i]=palentry;
       pixel+=bytesPerPixel;
     };
@@ -242,7 +380,39 @@ bool convertToIndexed(png_data& img, bool hasAlpha)
   return tooManyColors;
 };
 
+//packs a line of width pixels (1 byte per pixel) in row, with 8/nbits pixels packed
+//into each byte
+//returns the new number of bytes in row
+int pack(png_bytep row,int width,int nbits)
+{
+  int pixelsPerByte=8/nbits;
+  if (pixelsPerByte<=1) return width;
+  int ander=(1<<nbits)-1;
+  int outByte=0;
+  int count=0;
+  int outIndex=0;
+  for (int i=0; i<width; ++i)
+  {
+    outByte+=(row[i]&ander);
+    if (++count==pixelsPerByte) 
+    {
+      row[outIndex]=outByte;
+      count=0;
+      ++outIndex;
+      outByte=0;
+    };
+    outByte<<=nbits;
+  };
 
+  if (count>0) 
+  {
+    outByte<<=nbits*(pixelsPerByte-count);
+    row[outIndex]=outByte;
+    ++outIndex;
+  };  
+  
+  return outIndex;
+};
 
 int main(int argc, char* argv[])
 {
@@ -261,9 +431,30 @@ int main(int argc, char* argv[])
   
   vector<png_data> pngdata;
   
+  static int numColors=256; //static to get rid of longjmp() clobber warning
+  
   //i is static because used in a setjmp() block
   for (static int i=2; i<argc; ++i)
   {
+    if (strcmp(argv[i],"--colors")==0)
+    {
+      ++i;
+      if (i>=argc)
+      {
+        fprintf(stderr,"Number missing after --colors\n");
+        exit(1);
+      };
+      char* endptr;
+      long num=strtol(argv[i],&endptr,10);
+      if (*(argv[i])==0 || *endptr!=0 || (num!=2 && num!=16 && num!=256))
+      {
+        fprintf(stderr,"Illegal number of colors\n");
+        exit(1);
+      };
+      numColors=num;
+      continue;
+    };
+    
     FILE* pngfile=fopen(argv[i],"rb");
     if (pngfile==NULL)  {perror(argv[i]); exit(1);};
     png_byte header[8];
@@ -275,6 +466,9 @@ int main(int argc, char* argv[])
     };
     
     png_data data;
+    data.requested_colors=numColors;
+    for (data.col_bits=1; (1<<data.col_bits)<numColors; ++data.col_bits);
+    
     data.png_ptr=png_create_read_struct
                    (PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     if (!data.png_ptr)
@@ -342,7 +536,7 @@ int main(int argc, char* argv[])
     {
       if (convertToIndexed(data, ((color_type & PNG_COLOR_MASK_ALPHA)!=0)))
       {
-        fprintf(stderr,"%s: Too many colors! Excess colors mapped to black!\n",argv[i]);
+        fprintf(stderr,"%s: Warning! Color reduction may not be optimal!\nIf the result is not satisfactory, reduce the number of colors\nbefore using png2ico.\n",argv[i]);
       };
     };  
     
@@ -358,7 +552,7 @@ int main(int argc, char* argv[])
   
   writeWord(outfile,0); //idReserved
   writeWord(outfile,1); //idType
-  writeWord(outfile,pngdata.size());
+  writeWord(outfile,pngdata.size()); //idCount
   
   int offset=6+pngdata.size()*16;
   
@@ -367,12 +561,12 @@ int main(int argc, char* argv[])
   {
     writeByte(outfile,img->width); //bWidth
     writeByte(outfile,img->height); //bHeight
-    writeByte(outfile,0); //bColorCount (0=>256)
+    writeByte(outfile,img->requested_colors&255); //bColorCount
     writeByte(outfile,0); //bReserved
     writeWord(outfile,0); //wPlanes
     writeWord(outfile,0); //wBitCount
-    int resSize=40+256*4+(andMaskLineLen(img->width)+xorMaskLineLen(img->width))*img->height;
-    writeDWord(outfile,resSize);
+    int resSize=40+img->requested_colors*4+(andMaskLineLen(*img)+xorMaskLineLen(*img))*img->height;
+    writeDWord(outfile,resSize); //dwBytesInRes
     writeDWord(outfile,offset); //dwImageOffset
     offset+=resSize;
   };
@@ -380,29 +574,24 @@ int main(int argc, char* argv[])
   
   for(img=pngdata.begin(); img!=pngdata.end(); ++img)
   {
-    int xorLinePad=xorMaskLineLen(img->width) - img->width;
-    
     writeDWord(outfile,40); //biSize
     writeDWord(outfile,img->width); //biWidth
-    writeDWord(outfile,2*img->height); //biHeight
+    writeDWord(outfile,2*img->height); //biHeight (2 times because the 2 masks are counted)
     writeWord(outfile,1);   //biPlanes
-    writeWord(outfile,8);   //biBitCount
+    writeWord(outfile,img->col_bits);   //biBitCount
     writeDWord(outfile,0);  //biCompression
-    writeDWord(outfile,(andMaskLineLen(img->width)+xorMaskLineLen(img->width))*img->height);  //biSizeImage
+    writeDWord(outfile,(andMaskLineLen(*img)+xorMaskLineLen(*img))*img->height);  //biSizeImage
     writeDWord(outfile,0);  //biXPelsPerMeter
     writeDWord(outfile,0);  //biYPelsPerMeter
     writeDWord(outfile,0); //biClrUsed (MUST BE 0 ACCORDING TO bmp.txt!!! I tried putting the real number here, but this breaks icons in some places)
     writeDWord(outfile,0);   //biClrImportant
-    for (int i=0; i<256; ++i)
+    for (int i=0; i<img->requested_colors; ++i)
     {
       char col[4];
-      memset(col,0,4);
-      if (i<img->num_palette)
-      {
-        col[0]=img->palette[i].blue;
-        col[1]=img->palette[i].green;
-        col[2]=img->palette[i].red;
-      };
+      col[0]=img->palette[i].blue;
+      col[1]=img->palette[i].green;
+      col[2]=img->palette[i].red;
+      col[3]=0;
       if (fwrite(col,4,1,outfile)!=1) {perror("Write error"); exit(1);};
     };
     
@@ -410,17 +599,19 @@ int main(int argc, char* argv[])
     for (int y=img->height-1; y>=0; --y)
     {
       png_bytep row=row_pointers[y];
-      if (fwrite(row,img->width,1,outfile)!=1) {perror("Write error"); exit(1);};
-      for(int i=0; i<xorLinePad; ++i) writeByte(outfile,0);
+      int newLength=pack(row,img->width,img->col_bits);
+      if (fwrite(row,newLength,1,outfile)!=1) {perror("Write error"); exit(1);};
+      for(int i=0; i<xorMaskLineLen(*img)-newLength; ++i) writeByte(outfile,0);
     };
     
     for (int y=img->height-1; y>=0; --y)
     {
       png_bytep transPtr=img->transMap[y];
-      if (fwrite(transPtr,andMaskLineLen(img->width),1,outfile)!=1) {perror("Write error"); exit(1);};
+      if (fwrite(transPtr,andMaskLineLen(*img),1,outfile)!=1) {perror("Write error"); exit(1);};
     };
   };
   
   fclose(outfile);
 };
+
 
