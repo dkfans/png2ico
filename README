@@ -7,10 +7,3 @@ Homepage:
 Maintainer:
   Matthias S. Benkmann <matthias@winterdrache.de>
 
-Installing:
-  Windows users should use the precompiled binary that can be downloaded
-  from the homepage. If you insist on building the program yourself, read
-  README.win.
-  
-  Users of Unix-like environments should read README.unix.
-
