@@ -1,15 +1,18 @@
-To build png2ico on a Unix-like platform simply issue the command
+To build png2ico on a Unix-like platform, check the Makefile to see if you
+need to apply any changes, then simply issue the command
 
     make
     
-You need to have libpng installed. Furthermore, the Makefile uses the
-GNU C++ compiler g++ by default. If you don't have g++, change the Makefile to
-use your compiler instead.
+You need to have libpng installed. You may need to change the Makefile to
+make the compiler search the appropriate directories to find libpng.
+Furthermore, the Makefile uses the GNU C++ compiler g++ by default. 
+If you don't have g++, change the Makefile to use your compiler instead
+or set the CXX environment variable appropriately.
 
 There should be no problems building the program on a GNU/Linux system. If you
 can provide information about building on other platforms, let me know.
 
 The Makefile does not have an install target. To install the program, just
 copy the binary png2ico to wherever you want it (e.g. /usr/local/bin/) and
-the manpage doc/png2ico.1 to an appropriate directory 
+the manpage doc/man1/png2ico.1 to an appropriate directory 
 (e.g. /usr/local/man/man1/).
