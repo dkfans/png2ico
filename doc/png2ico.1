@@ -69,10 +69,16 @@ Windows icons may use a maximum of 256 colors, but \fBpng2ico\fP does not
 implement proper color reduction. In the very unlikely case that you managed
 to use more than 256 colors for an icon image, you will have to reduce the
 number of colors before feeding the image to \fBpng2ico\fP.
-Note that this does \fInot\fP mean you have to convert your PNGs to 
+Note that this does \fInot\fP mean that you have to convert RGB .PNGs to 
 indexed images before using them with
 \fBpng2ico\fP. \fBpng2ico\fP works just fine with RGB images, as long as the
 number of colors actually used in the image does not exceed 256.
+
+Some programs sometimes ignore the
+transparency mask and determine transparency using the color value of a pixel.
+To make sure that transparency works properly even in those situations,
+\fBpng2ico\fP uses palette entry 0 exlusively for transparent pixels. This
+effectively reduces the number of colors that you can use in an icon to 255.
 
 .SH AUTHOR
 Matthias S. Benkmann <matthias@winterdrache.de>.
