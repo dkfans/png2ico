@@ -1,3 +1,23 @@
+/*
+TODO:
+>When feeding the image ms26.png (see message "what's wrong with this
+>image") to png2ico I get the message
+>
+>libpng error: Read error
+>
+>How do I suppress the outputting of this message? I was surprised that
+>libpng outputs a message in addition to jumping to the setjmp error
+>handler (which outputs its own message). Do I need to write my own error
+>handling functions or is there a simpler way (of course I don't want to
+>recompile libpng itself)?
+
+That message is the message printed by the setjmp error handler.
+
+You can replace the error handler without recompiling libpng.  Just
+include a pointer to your error handler in png_read_create_struct().
+See for example pngtest.c which illustrates replacing the error handler.
+*/
+
 /* Copyright (C) 2002 Matthias S. Benkmann <matthias@winterdrache.de>
 
 This program is free software; you can redistribute it and/or
