@@ -1,0 +1,124 @@
+This archive has been digitally signed. Before doing anything with this 
+archive or its contents, you should verify its integrity by checking it 
+against the signature. This will ensure that the archive you have has not 
+suffered from transmission errors or deliberate tampering by a hacker.
+
+Checking the signature works as follows:
+
+1. Obtain OpenPGP-compliant software
+   
+   If you do not already have the appropriate software, you can find a 
+   command-line tool, GNUPG, at the following location:
+   
+     http://www.gnupg.org
+   
+   It is available for various operating systems.
+   The site also has links to GUI frontends.
+
+   For the rest of this document it will be assumed that you use the GNUPG 
+   command-line tool.
+   
+   After installing GNUPG, you should create yourself a key pair. You don't
+   actually need to do this if you only want to verify signatures and not
+   make signatures yourself. To create a key pair for yourself, use the 
+   command
+   
+     gpg --gen-key
+   
+   (just accept the default values)
+     
+   If you get the error "gpg: no writable secret keyring found", you will
+   have to create an empty file called secring.gpg (make sure it is really 
+   empty, i.e. has size 0) in the same directory that contains the file 
+   pubring.gpg (under Unix that's usually in ~/.gnupg/) and then repeat the 
+   above procedure.
+
+   
+2. Obtain the public key for the key used to sign the archive
+
+   The archive has been signed by 
+   Matthias S. Benkmann <matthias@winterdrache.de>
+   and you will need his public key to check the signature. 
+   If you do not already have it, obtain it from a keyserver such as
+     www.keyserver.net or pgp.mit.edu
+   and add it to your keyring.
+   
+   The key you want is the following:
+   
+   Matthias S. Benkmann (Developer, Artist, Writer) <matthias@winterdrache.de>
+   Key ID = 9651C480
+   Size = 1024
+   Created = 2002-10-11
+   Key fingerprint = 4695 FB77 A736 E4DA 9C32  6EE1 ED8A E443 9651 C480
+   
+   You can obtain the key in several ways:
+   
+    1st possibility: 
+       Go to http://www.keyserver.net  or http://pgp.mit.edu
+       and use the search form to locate and view the key.
+       To add it to your GNUPG keychain, copy'n'paste everything between
+       (and including)
+       -----BEGIN PGP PUBLIC KEY BLOCK-----
+       and 
+       -----END PGP PUBLIC KEY BLOCK-----
+       into a file winterdrache.key and import it with the following command
+         
+         gpg --import winterdrache.key
+
+    2nd possibility: 
+      Obtain the key automatically from the key server with the command
+      
+      gpg --keyserver pgp.mit.edu --search-keys matthias@winterdrache.de
+       
+    
+    After obtaining the key you should verify that it is indeed the key
+    that you believe it is, i.e. that it belongs to the maintainer of this
+    archive. This step is optional but recommended. If
+    you do not perform this step, you will see a warning when you verify
+    the signature of this archive.
+    To verify that you got the proper key, obtain the fingerprint of the key 
+    with the command
+        
+          gpg --fingerprint matthias@winterdrache.de
+          
+    and have this fingerprint checked by an independent, trustworthy source.
+    You can for instance send an email to the package maintainer including
+    the fingerprint you obtained above and ask him to verify it.
+    
+    Unfortunately, if this archive has been modified by a hacker, it is 
+    possible that all of the information in it, including the file you are 
+    currently reading has been forged by the hacker to trick you into obtaining
+    a key created by the hacker. The maintainer's email address may also have
+    been forged to point to one of the hacker's mail accounts (not likely as
+    that would offer a way to track the hacker down, but the possibility 
+    exists). If the web server distributing this archive has been hacked, it is 
+    possible that all the information on the web page has also been modified,
+    including any contact information.
+    
+    You have to decide for yourself how paranoid you want to be. If you don't
+    trust any of the information in this archive or on the server that you
+    got it from, you will need to find some other means of verifying the
+    integrity of the key.
+    
+    After verifying the key's integrity, you should sign it with your own
+    private key to make GNUPG's warning go away. Of course, this only works 
+    if you have created a key pair for yourself. If you haven't done so, use
+    the command  ................
+    
+    You do this as follows:
+    
+      gpg --edit-key matthias@winterdrache.de
+    
+    You will find yourself at the GPG command line. 
+      
+      sign
+      
+    Answer the questions presented to you.
+    After successfully signing the key, use the command
+      
+      quit
+      
+    to exit GPG. Answer "yes" when asked if you want to save the changes.
+
+You can download the signature as
+a separate file from the same place where you got this archive.
