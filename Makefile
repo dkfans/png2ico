@@ -10,4 +10,5 @@ doc/png2ico.txt: doc/png2ico.1
 	man $< |sed  -e $$'s/.\b\\(.\\)/\\1/g' -e 's/\(.*\)/\1'$$'\r/' >$@
 
 clean:
-	rm -f png2ico *~
+	rm -f png2ico *~ doc/*~ *.bak
+
