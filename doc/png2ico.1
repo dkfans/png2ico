@@ -1,0 +1,66 @@
+.\" This is a Unix manpage. png2ico.txt contains the same text suitable for
+.\" reading in Windows (with Notepad, Wordpad, Word,...).
+.\" 
+.\" Copyright (C) 2002 Matthias S. Benkmann <m.s.b@gmx.net>
+.\"
+.TH png2ico 1 "1 June 2002"
+
+.SH NAME
+png2ico \- convert .PNG file(s) to Windows .ICO icon resource
+
+.SH SYNOPSIS
+.B png2ico 
+outfile.ico infile1.png [infile2.png ...]
+
+.SH DESCRIPTION
+\fBpng2ico\fP takes the input files and stores them in the output file
+as a Windows icon resource. Usually the input files would all represent the
+same image in different resolutions (common resolutions are 16x16, 32x32
+and 64x64). A program reading the icon resource will pick the image
+closest to its desired resolution and will then scale it if necessary.
+
+.SH "FAVICON.ICO"
+Most graphical browsers today support the \fIfavicon.ico\fP file. When
+a user bookmarks a web page, the browser will automatically check if it finds
+a \fIfavicon.ico\fP file on the web server and display it in the bookmark menu.
+Depending on the browser and configuration the \fIfavicon.ico\fP may also
+appear in other places. 
+
+To create a \fIfavicon.ico\fP simply create a 
+16x16 .PNG file and convert it to an icon resource with 
+\fBpng2ico\fP. You may of course add other alternative resolutions but most
+browsers only use a 16x16 image. Keep in mind that for a user with a slow
+modem a \fIfavicon.ico\fP may increase the page loading time by a few seconds
+if it is too large, so don't overdo it. Adding a 32x32 alternative
+should be enough to make sure the image will look good even in contexts with
+larger icons. Adding even more and larger alternatives is unnecessary bloat.
+
+Don't forget that the \fIfavicon.ico\fP may be composed against backgrounds of
+different colors so you should use transparency rather than a solid background 
+if you want to avoid that your icon appears inside a box.
+
+To add your new \fIfavicon.ico\fP to a web page put it on the server into
+the same directory as the web page. That is the 1st place a browser will look.
+If it doesn't find an icon there, it checks the top-level directory of the
+web server, so by putting it there you can have a default favicon for all
+the pages in your domain.
+Depending on browser and configuration, the \fIfavicon.ico\fP is not always
+rendered, even if it is in one of the above locations, unless the web page 
+explicitly declares its presence. To declare that your web page has an icon,
+you add the following 2 lines into the \fB<head>\fP section of your page:
+
+.RS
+.B <link rel="icon" href="favicon.ico" type="image/x\-icon">
+
+.B <link rel="shortcut\ icon" href="favicon.ico" type="image/x\-icon">
+.RE
+
+
+.SH AUTHOR
+Matthias S. Benkmann <m.s.b@gmx.net>.
+
+\fBpng2ico\fP lives at http://www.winterdrache.de/freeware
+
+.SH "SEE ALSO"
+.BR convert(1), 
+.BR gimp(1)
