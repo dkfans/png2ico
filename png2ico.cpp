@@ -55,6 +55,7 @@ Notes about transparent and inverted pixels:
 #include <cstdio>
 #include <vector>
 #include <climits>
+#include <cstring>
 
 #if __GNUC__ > 2
 #include <ext/hash_map>
