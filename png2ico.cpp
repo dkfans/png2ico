@@ -155,7 +155,8 @@ void convertToIndexed(png_data& img, bool hasAlpha)
         else pixel[3]=255;
         
         quad+=(pixel[3]<<24);
-      };
+      }
+      else if (!trans) quad+=(255<<24);
       
       if (trans) 
         mapQuadToPalEntry[quad]=0;
@@ -200,10 +201,11 @@ void convertToIndexed(png_data& img, bool hasAlpha)
     
     for (unsigned i=0; i<img.width; ++i)
     {
+      bool trans=((*checkTrans)(pixel,img));
       unsigned int quad=pixel[0]+(pixel[1]<<8)+(pixel[2]<<16);
-      if (hasAlpha) quad+=(pixel[3]<<24);
+      if (hasAlpha) quad+=(pixel[3]<<24); else if (!trans) quad+=(255<<24);
       
-      if ((*checkTrans)(pixel,img)) ++transbyte;
+      if (trans) ++transbyte; 
       if (++count8==8)
       {
         *transPtr++ = transbyte;
