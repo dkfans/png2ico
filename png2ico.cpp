@@ -26,6 +26,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include <png.h>
 
+#include "VERSION"
+
 using namespace std;
 namespace __gnu_cxx{};
 using namespace __gnu_cxx;
@@ -201,6 +203,7 @@ int main(int argc, char* argv[])
 {
   if (argc<3)
   {
+    fprintf(stderr,version"\n");
     fprintf(stderr,"USAGE: png2ico icofile pngfile1 [pngfile2 ...]\n");
     exit(1);
   };
