@@ -55,6 +55,15 @@ you add the following 2 lines into the \fB<head>\fP section of your page:
 .B <link rel="shortcut\ icon" href="favicon.ico" type="image/x\-icon">
 .RE
 
+.SH BUGS
+Windows icons may use a maximum of 256 colors, but \fBpng2ico\fP does not
+implement proper color reduction. In the very unlikely case that you managed
+to use more than 256 colors for an icon image, you will have to reduce the
+number of colors before feeding the image to \fBpng2ico\fP.
+Note that this does \fInot\fP mean you have to convert your PNGs to 
+indexed images before using them with
+\fBpng2ico\fP. \fBpng2ico\fP works just fine with RGB images, as long as the
+number of colors actually used in the image does not exceed 256.
 
 .SH AUTHOR
 Matthias S. Benkmann <m.s.b@gmx.net>.
