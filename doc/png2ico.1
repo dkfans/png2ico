@@ -55,6 +55,15 @@ you add the following 2 lines into the \fB<head>\fP section of your page:
 .B <link rel="shortcut\ icon" href="favicon.ico" type="image/x\-icon">
 .RE
 
+.SH EXAMPLES
+
+To create a favicon.ico from 2 logo files (the 1st in 16x16 resolution and
+the 2nd in 32x32 resolution) you could use the following command:
+
+.RS
+.B png2ico favicon.ico logo16x16.png logo32x32.png
+.RE
+
 .SH BUGS
 Windows icons may use a maximum of 256 colors, but \fBpng2ico\fP does not
 implement proper color reduction. In the very unlikely case that you managed
