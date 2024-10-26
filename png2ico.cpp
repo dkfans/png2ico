@@ -574,13 +574,13 @@ png_data load_file(const char * filename, const int numColors)
 
 
 
-  if ( (data.width&7)!=0 || data.width>=256 || data.height>=256)
+  if ((data.width & 7) != 0 || data.width > 512 || data.height > 512)
   {
     //I don't know if the following is really a requirement (bmp.txt says that
     //only 16x16, 32x32 and 64x64 are allowed but that doesn't seem right) but
     //if the width is not a multiple of 8, then the loop creating the and mask later
     //doesn't work properly because it doesn't shift in padding bits
-    throw std::runtime_error(std::string(filename) + ": Width must be multiple of 8 and <256. Height must be <256.");
+    throw std::runtime_error(std::string(filename) + ": Width must be multiple of 8 and <=512. Height must be <=512.");
   }
 
   if ((color_type & PNG_COLOR_MASK_COLOR)==0)
