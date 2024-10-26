@@ -1,4 +1,4 @@
-#  If compiling fails with the error that png.h or -lpng can't be found, 
+#  If compiling fails with the error that png.h or -lpng can't be found,
 #  because libpng is installed under /usr/local/ on your system, then
 #  remove the # in the following 2 lines.
 INCLUDES=#-I/usr/local/include
@@ -6,14 +6,19 @@ LDFLAGS=#-L/usr/local/lib
 
 TAR=tar
 CXX=g++
-CXXFLAGS=-W -Wall -O2 -finline-functions
-#CXXFLAGS=-O0 -W -Wall
-DEBUG=-g
+CXXFLAGS = -std=c++17 -Wall -Wextra -pedantic -Werror -O3
+DEBUG ?= 1
+
+ifeq ($(DEBUG), 1)
+	CXXFLAGS += -DDEBUG -g
+else
+	CXXFLAGS += -DNDEBUG
+endif
 
 all: png2ico
 
 png2ico: png2ico.cpp
-	$(CXX) $(CXXFLAGS) $(DEBUG) $(INCLUDES) $(LDFLAGS) -o $@ png2ico.cpp -lpng -lz -lm
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) -o $@ png2ico.cpp
 
 doc/png2ico.txt: doc/man1/png2ico.1
 	man -M "`pwd`"/doc png2ico |sed  -e $$'s/.\b\\(.\\)/\\1/g' -e 's/\(.*\)/\1'$$'\r/' >$@
@@ -23,7 +28,7 @@ release: maintainer-clean png2ico doc/png2ico.txt
 	pwd="`pwd`" && pwd="$${pwd##*/}" && cd .. && \
 	version=$$(sed 's/^.* \([0-9]*-[0-9]*-[0-9]*\) .*$$/\1/' "$$pwd"/VERSION) && \
 	$(TAR) --owner=0 --group=0 -czf "$$pwd"/png2ico-src-$${version}.tar.gz "$$pwd"/{LICENSE,VERSION,Makefile,README,README.unix,README.win,README.verifying,doc/bmp.txt,doc/man1/png2ico.1,makefile.bcc32,makezlib.bcc32,png2ico.cpp} && \
-	zip "$$pwd"/png2ico-win-$${version}.zip "$$pwd"/{LICENSE,VERSION,README,README.verifying,doc/png2ico.txt,png2ico.exe} 
+	zip "$$pwd"/png2ico-win-$${version}.zip "$$pwd"/{LICENSE,VERSION,README,README.verifying,doc/png2ico.txt,png2ico.exe}
 	@echo
 	@echo '****************************************************************'
 	@echo 'HAVE YOU UPDATED VERSION IN BOTH THE UNIX AND THE WINDOWS BUILD?'
@@ -51,4 +56,3 @@ verify:
 	version=$$(sed 's/^.* \([0-9]*-[0-9]*-[0-9]*\) .*$$/\1/' VERSION) && \
 	gpg --verify png2ico-src-$${version}.tar.gz.sig png2ico-src-$${version}.tar.gz && \
 	gpg --verify png2ico-win-$${version}.zip.sig png2ico-win-$${version}.zip
-
