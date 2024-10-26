@@ -58,6 +58,7 @@ Notes about transparent and inverted pixels:
 #include <climits>
 #include <cstring>
 #include <unordered_map>
+#include <stdexcept>
 #include <png.h>
 
 #include "VERSION"
@@ -72,7 +73,9 @@ void writeWord(FILE* f, int word)
   char data[2];
   data[0]=(word&255);
   data[1]=(word>>8)&255;
-  if (fwrite(data,2,1,f)!=1) {perror("Write error"); exit(1);};
+  if (fwrite(data,2,1,f)!=1) {
+    throw std::runtime_error("Write error");
+  };
 };
 
 void writeDWord(FILE* f, unsigned int dword)
@@ -82,14 +85,18 @@ void writeDWord(FILE* f, unsigned int dword)
   data[1]=(dword>>8)&255;
   data[2]=(dword>>16)&255;
   data[3]=(dword>>24)&255;
-  if (fwrite(data,4,1,f)!=1) {perror("Write error"); exit(1);};
+  if (fwrite(data,4,1,f)!=1) {
+    throw std::runtime_error("Write error");
+  }
 };
 
 void writeByte(FILE* f, int byte)
 {
   char data[1];
   data[0]=(byte&255);
-  if (fwrite(data,1,1,f)!=1) {perror("Write error"); exit(1);};
+  if (fwrite(data,1,1,f)!=1) {
+    throw std::runtime_error("Write error");
+  }
 };
 
 
@@ -431,17 +438,13 @@ void usage()
 {
   fprintf(stderr,version"\n");
   fprintf(stderr,"USAGE: png2ico icofile [--colors <num>] pngfile1 [pngfile2 ...]\n");
-  exit(1);
 };
 
-int main(int argc, char* argv[])
+bool process_files(int argc, char * argv[])
 {
-  if (argc<3) usage();
-
   if (argc-2 > word_max)
   {
-    fprintf(stderr,"Too many PNG files\n");
-    exit(1);
+    throw std::runtime_error("Too many PNG files");
   };
 
   std::vector<png_data> pngdata;
@@ -457,15 +460,13 @@ int main(int argc, char* argv[])
       ++i;
       if (i>=argc)
       {
-        fprintf(stderr,"Number missing after --colors\n");
-        exit(1);
+        throw std::runtime_error("Number missing after --colors");
       };
       char* endptr;
       long num=strtol(argv[i],&endptr,10);
       if (*(argv[i])==0 || *endptr!=0 || (num!=2 && num!=16 && num!=256))
       {
-        fprintf(stderr,"Illegal number of colors\n");
-        exit(1);
+        throw std::runtime_error("Illegal number of colors");
       };
       numColors=num;
       continue;
@@ -474,13 +475,16 @@ int main(int argc, char* argv[])
     if (outfileName==NULL) { outfileName=argv[i]; continue; };
 
     FILE* pngfile=fopen(argv[i],"rb");
-    if (pngfile==NULL)  {perror(argv[i]); exit(1);};
+    if (pngfile==NULL)  {
+      throw std::runtime_error(std::string("Cannot open ") + argv[i]);
+    }
     png_byte header[8];
-    if (fread(header,8,1,pngfile)!=1) {perror(argv[i]); exit(1);};
+    if (fread(header,8,1,pngfile)!=1) {
+      throw std::runtime_error(std::string("Cannot read ") + argv[i]);
+    }
     if (png_sig_cmp(header,0,8))
     {
-      fprintf(stderr,"%s: Not a PNG file\n",argv[i]);
-      exit(1);
+      throw std::runtime_error(std::string(argv[i]) + ": Not a PNG file");
     };
 
     png_data data;
@@ -491,31 +495,27 @@ int main(int argc, char* argv[])
                    (PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     if (!data.png_ptr)
     {
-      fprintf(stderr,"png_create_read_struct error\n");
-      exit(1);
+      throw std::runtime_error("png_create_read_struct error");
     };
 
     data.info_ptr=png_create_info_struct(data.png_ptr);
     if (!data.info_ptr)
     {
       png_destroy_read_struct(&data.png_ptr, (png_infopp)NULL, (png_infopp)NULL);
-      fprintf(stderr,"png_create_info_struct error\n");
-      exit(1);
+      throw std::runtime_error("png_create_info_struct error");
     };
 
     data.end_info=png_create_info_struct(data.png_ptr);
     if (!data.end_info)
     {
       png_destroy_read_struct(&data.png_ptr, &data.info_ptr, (png_infopp)NULL);
-      fprintf(stderr,"png_create_info_struct error\n");
-      exit(1);
+      throw std::runtime_error("png_create_info_struct error");
     };
 
     if (setjmp(png_jmpbuf(data.png_ptr)))
     {
       png_destroy_read_struct(&data.png_ptr, &data.info_ptr, &data.end_info);
-      fprintf(stderr,"%s: PNG error\n",argv[i]);
-      exit(1);
+      throw std::runtime_error(std::string(argv[i]) + ": PNG error");
     };
 
     png_init_io(data.png_ptr, pngfile);
@@ -535,20 +535,17 @@ int main(int argc, char* argv[])
       //only 16x16, 32x32 and 64x64 are allowed but that doesn't seem right) but
       //if the width is not a multiple of 8, then the loop creating the and mask later
       //doesn't work properly because it doesn't shift in padding bits
-      fprintf(stderr,"%s: Width must be multiple of 8 and <256. Height must be <256.\n",argv[i]);
-      exit(1);
+      throw std::runtime_error(std::string(argv[i]) + ": Width must be multiple of 8 and <256. Height must be <256.");
     };
 
     if ((color_type & PNG_COLOR_MASK_COLOR)==0)
     {
-      fprintf(stderr,"%s: Grayscale image not supported\n",argv[i]);
-      exit(1);
+      throw std::runtime_error(std::string(argv[i]) + ": Grayscale image not supported");
     };
 
     if (color_type==PNG_COLOR_TYPE_PALETTE)
     {
-      fprintf(stderr,"This can't happen. PNG_TRANSFORM_EXPAND transforms image to RGB.\n");
-      exit(1);
+      throw std::runtime_error("This can't happen. PNG_TRANSFORM_EXPAND transforms image to RGB.");
     }
     else
     {
@@ -564,10 +561,14 @@ int main(int argc, char* argv[])
   };
 
 
-  if (outfileName==NULL || pngdata.size()<1) usage();
+  if (outfileName==NULL || pngdata.size()<1) {
+    return false;
+  }
 
   FILE* outfile=fopen(outfileName,"wb");
-  if (outfile==NULL) {perror(argv[1]); exit(1);};
+  if (outfile==NULL) {
+    throw std::runtime_error(std::string("Cannot open ") + outfileName);
+  };
 
   writeWord(outfile,0); //idReserved
   writeWord(outfile,1); //idType
@@ -611,7 +612,9 @@ int main(int argc, char* argv[])
       col[1]=img->palette[i].green;
       col[2]=img->palette[i].red;
       col[3]=0;
-      if (fwrite(col,4,1,outfile)!=1) {perror("Write error"); exit(1);};
+      if (fwrite(col,4,1,outfile)!=1) {
+        throw std::runtime_error("Write error");
+      };
     };
 
     png_bytep* row_pointers=png_get_rows(img->png_ptr, img->info_ptr);
@@ -619,16 +622,39 @@ int main(int argc, char* argv[])
     {
       png_bytep row=row_pointers[y];
       int newLength=pack(row,img->width,img->col_bits);
-      if (fwrite(row,newLength,1,outfile)!=1) {perror("Write error"); exit(1);};
+      if (fwrite(row,newLength,1,outfile)!=1) {
+        throw std::runtime_error("Write error");
+      };
       for(int i=0; i<xorMaskLineLen(*img)-newLength; ++i) writeByte(outfile,0);
     };
 
     for (int y=img->height-1; y>=0; --y)
     {
       png_bytep transPtr=img->transMap[y];
-      if (fwrite(transPtr,andMaskLineLen(*img),1,outfile)!=1) {perror("Write error"); exit(1);};
+      if (fwrite(transPtr,andMaskLineLen(*img),1,outfile)!=1) {
+        throw std::runtime_error("Write error");
+      }
     };
   };
 
   fclose(outfile);
+  return true;
 };
+
+int main(int argc, char* argv[])
+{
+  if (argc<3) {
+    usage();
+    return 1;
+  }
+  try {
+    if (!process_files(argc, argv)) {
+      usage();
+      return 1;
+    }
+    return 0;
+  } catch (const std::exception & e) {
+    fprintf(stderr, "%s\n", e.what());
+  }
+  return 1;
+}
