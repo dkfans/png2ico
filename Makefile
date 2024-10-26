@@ -6,14 +6,19 @@ LDFLAGS=#-L/usr/local/lib
 
 TAR=tar
 CXX=g++
-CXXFLAGS=-W -Wall -O2 -finline-functions
-#CXXFLAGS=-O0 -W -Wall
-DEBUG=-g
+CXXFLAGS = -Wall -Wextra -pedantic -Werror -O3
+DEBUG ?= 1
+
+ifeq ($(DEBUG), 1)
+	CXXFLAGS += -DDEBUG -g
+else
+	CXXFLAGS += -DNDEBUG
+endif
 
 all: png2ico
 
 png2ico: png2ico.cpp
-	$(CXX) $(CXXFLAGS) $(DEBUG) $(INCLUDES) $(LDFLAGS) -o $@ png2ico.cpp -lpng -lz -lm
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) -o $@ png2ico.cpp -lpng -lz -lm
 
 doc/png2ico.txt: doc/man1/png2ico.1
 	man -M "`pwd`"/doc png2ico |sed  -e $$'s/.\b\\(.\\)/\\1/g' -e 's/\(.*\)/\1'$$'\r/' >$@
