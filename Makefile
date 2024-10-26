@@ -1,4 +1,4 @@
-#  If compiling fails with the error that png.h or -lpng can't be found, 
+#  If compiling fails with the error that png.h or -lpng can't be found,
 #  because libpng is installed under /usr/local/ on your system, then
 #  remove the # in the following 2 lines.
 INCLUDES=#-I/usr/local/include
@@ -23,7 +23,7 @@ release: maintainer-clean png2ico doc/png2ico.txt
 	pwd="`pwd`" && pwd="$${pwd##*/}" && cd .. && \
 	version=$$(sed 's/^.* \([0-9]*-[0-9]*-[0-9]*\) .*$$/\1/' "$$pwd"/VERSION) && \
 	$(TAR) --owner=0 --group=0 -czf "$$pwd"/png2ico-src-$${version}.tar.gz "$$pwd"/{LICENSE,VERSION,Makefile,README,README.unix,README.win,README.verifying,doc/bmp.txt,doc/man1/png2ico.1,makefile.bcc32,makezlib.bcc32,png2ico.cpp} && \
-	zip "$$pwd"/png2ico-win-$${version}.zip "$$pwd"/{LICENSE,VERSION,README,README.verifying,doc/png2ico.txt,png2ico.exe} 
+	zip "$$pwd"/png2ico-win-$${version}.zip "$$pwd"/{LICENSE,VERSION,README,README.verifying,doc/png2ico.txt,png2ico.exe}
 	@echo
 	@echo '****************************************************************'
 	@echo 'HAVE YOU UPDATED VERSION IN BOTH THE UNIX AND THE WINDOWS BUILD?'
@@ -51,4 +51,3 @@ verify:
 	version=$$(sed 's/^.* \([0-9]*-[0-9]*-[0-9]*\) .*$$/\1/' VERSION) && \
 	gpg --verify png2ico-src-$${version}.tar.gz.sig png2ico-src-$${version}.tar.gz && \
 	gpg --verify png2ico-win-$${version}.zip.sig png2ico-win-$${version}.zip
-
