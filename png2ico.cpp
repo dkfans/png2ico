@@ -53,6 +53,7 @@ Notes about transparent and inverted pixels:
 
 
 #include <cstdio>
+#include <cstdlib>
 #include <vector>
 #include <climits>
 #include <cstring>
