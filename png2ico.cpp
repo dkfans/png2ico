@@ -75,8 +75,8 @@ void writeWord(FILE* f, int word)
   data[1]=(word>>8)&255;
   if (fwrite(data,2,1,f)!=1) {
     throw std::runtime_error("Write error");
-  };
-};
+  }
+}
 
 void writeDWord(FILE* f, unsigned int dword)
 {
@@ -88,7 +88,7 @@ void writeDWord(FILE* f, unsigned int dword)
   if (fwrite(data,4,1,f)!=1) {
     throw std::runtime_error("Write error");
   }
-};
+}
 
 void writeByte(FILE* f, int byte)
 {
@@ -97,7 +97,7 @@ void writeByte(FILE* f, int byte)
   if (fwrite(data,1,1,f)!=1) {
     throw std::runtime_error("Write error");
   }
-};
+}
 
 
 
@@ -113,32 +113,32 @@ struct png_data
   int requested_colors;
   int col_bits;
   png_data():png_ptr(NULL),info_ptr(NULL),end_info(NULL),width(0),height(0),
-             palette(NULL),transMap(NULL),num_palette(0),requested_colors(0),col_bits(0){};
+             palette(NULL),transMap(NULL),num_palette(0),requested_colors(0),col_bits(0){}
 };
 
 int andMaskLineLen(const png_data& img)
 {
   int len=(img.width+7)>>3;
   return (len+3)&~3;
-};
+}
 
 int xorMaskLineLen(const png_data& img)
 {
   int pixelsPerByte=(8/img.col_bits);
   return ((img.width+pixelsPerByte-1)/pixelsPerByte+3)&~3;
-};
+}
 
 typedef bool (*checkTransparent_t)(png_bytep, png_data&);
 
 bool checkTransparent1(png_bytep data, png_data&)
 {
   return (data[3]<transparency_threshold);
-};
+}
 
 bool checkTransparent3(png_bytep, png_data&)
 {
   return false;
-};
+}
 
 //returns true if color reduction resulted in at least one of the image's colors
 //being mapped to a palette color with a quadratic distance of more than
@@ -158,7 +158,7 @@ bool convertToIndexed(png_data& img, bool hasAlpha)
   {
     bytesPerPixel=3;
     checkTrans=checkTransparent3;
-  };
+  }
 
   //first pass: gather all colors, make sure
   //alpha channel (if present) contains only 0 and 255
@@ -198,8 +198,8 @@ bool convertToIndexed(png_data& img, bool hasAlpha)
         mapQuadToPalEntry[quad]=-1;
 
       pixel+=bytesPerPixel;
-    };
-  };
+    }
+  }
 
   //always allocate entry 0 to black and entry 1 to white because
   //sometimes AND mask is interpreted as color index
@@ -217,7 +217,7 @@ bool convertToIndexed(png_data& img, bool hasAlpha)
   if (mapQuadToPalEntry.size()*img.requested_colors>slow_reduction_warn_threshold)
   {
     fprintf(stdout,"Please be patient. My color reduction algorithm is really slow.\n");
-  };
+  }
 
   //Now fill up the palette with colors from the image by repeatedly picking the
   //color most different from the previously picked colors and adding this to the
@@ -251,16 +251,16 @@ bool convertToIndexed(png_data& img, bool hasAlpha)
           dist+=temp*temp;
           if (dist<minDist) minDist=dist;
           distSum+=dist;
-        };
+        }
 
         if (minDist>mdqMinDist || (minDist==mdqMinDist && distSum>mdqDistSum))
         {
           mostDifferentQuad=quad;
           mdqMinDist=minDist;
           mdqDistSum=distSum;
-        };
-      };
-    };
+        }
+      }
+    }
 
     if (mdqMinDist>0) //if we have found a most different quad, add it to the palette
     {                  //and map it to the new palette entry
@@ -272,7 +272,7 @@ bool convertToIndexed(png_data& img, bool hasAlpha)
       ++img.num_palette;
     }
     else break; //otherwise (i.e. all quads are mapped) the palette is finished
-  };
+  }
 
   //Now map all yet unmapped colors to the most appropriate palette entry
   std::unordered_map<unsigned int,signed int>::iterator stop=mapQuadToPalEntry.end();
@@ -296,12 +296,12 @@ bool convertToIndexed(png_data& img, bool hasAlpha)
         dist+=temp*temp;
         temp=(blue-img.palette[i].blue);
         dist+=temp*temp;
-        if (dist<minDist) { minDist=dist; bestIndex=i; };
-      };
+        if (dist<minDist) { minDist=dist; bestIndex=i; }
+      }
 
       mapping.second=bestIndex;
-    };
-  };
+    }
+  }
 
   //Adjust all palette entries (except for 0 and 1) to be the mean of all
   //colors mapped to it
@@ -323,16 +323,16 @@ bool convertToIndexed(png_data& img, bool hasAlpha)
         green+=(quad>>8)&255;
         blue+=(quad>>16)&255;
         ++numMappings;
-      };
-    };
+      }
+    }
 
     if (numMappings>0)
     {
       img.palette[i].red=(red+red+numMappings)/(numMappings+numMappings);
       img.palette[i].green=(green+green+numMappings)/(numMappings+numMappings);
       img.palette[i].blue=(blue+blue+numMappings)/(numMappings+numMappings);
-    };
-  };
+    }
+  }
 
   //Now determine if a non-transparent source color got mapped to a target color that
   //has a distance that exceeds the threshold
@@ -356,8 +356,8 @@ bool convertToIndexed(png_data& img, bool hasAlpha)
       temp=(blue-img.palette[i].blue);
       dist+=temp*temp;
       if (dist>color_reduce_warning_threshold) tooManyColors=true;
-    };
-  };
+    }
+  }
 
 
   int transLineLen=andMaskLineLen(img);
@@ -385,19 +385,19 @@ bool convertToIndexed(png_data& img, bool hasAlpha)
         *transPtr++ = transbyte;
         count8=0;
         transbyte=0;
-      };
+      }
       transbyte+=transbyte; //shift left 1
 
       int palentry=mapQuadToPalEntry[quad];
       row[i]=palentry;
       pixel+=bytesPerPixel;
-    };
+    }
 
     for(int i=0; i<transLinePad; ++i) *transPtr++ = 0;
-  };
+  }
 
   return tooManyColors;
-};
+}
 
 //packs a line of width pixels (1 byte per pixel) in row, with 8/nbits pixels packed
 //into each byte
@@ -419,33 +419,33 @@ int pack(png_bytep row,int width,int nbits)
       count=0;
       ++outIndex;
       outByte=0;
-    };
+    }
     outByte<<=nbits;
-  };
+  }
 
   if (count>0)
   {
     outByte<<=nbits*(pixelsPerByte-count);
     row[outIndex]=outByte;
     ++outIndex;
-  };
+  }
 
   return outIndex;
-};
+}
 
 
 void usage()
 {
   fprintf(stderr,version"\n");
   fprintf(stderr,"USAGE: png2ico icofile [--colors <num>] pngfile1 [pngfile2 ...]\n");
-};
+}
 
 bool process_files(int argc, char * argv[])
 {
   if (argc-2 > word_max)
   {
     throw std::runtime_error("Too many PNG files");
-  };
+  }
 
   std::vector<png_data> pngdata;
 
@@ -461,18 +461,18 @@ bool process_files(int argc, char * argv[])
       if (i>=argc)
       {
         throw std::runtime_error("Number missing after --colors");
-      };
+      }
       char* endptr;
       long num=strtol(argv[i],&endptr,10);
       if (*(argv[i])==0 || *endptr!=0 || (num!=2 && num!=16 && num!=256))
       {
         throw std::runtime_error("Illegal number of colors");
-      };
+      }
       numColors=num;
       continue;
-    };
+    }
 
-    if (outfileName==NULL) { outfileName=argv[i]; continue; };
+    if (outfileName==NULL) { outfileName=argv[i]; continue; }
 
     FILE* pngfile=fopen(argv[i],"rb");
     if (pngfile==NULL)  {
@@ -485,7 +485,7 @@ bool process_files(int argc, char * argv[])
     if (png_sig_cmp(header,0,8))
     {
       throw std::runtime_error(std::string(argv[i]) + ": Not a PNG file");
-    };
+    }
 
     png_data data;
     data.requested_colors=numColors;
@@ -496,27 +496,27 @@ bool process_files(int argc, char * argv[])
     if (!data.png_ptr)
     {
       throw std::runtime_error("png_create_read_struct error");
-    };
+    }
 
     data.info_ptr=png_create_info_struct(data.png_ptr);
     if (!data.info_ptr)
     {
       png_destroy_read_struct(&data.png_ptr, (png_infopp)NULL, (png_infopp)NULL);
       throw std::runtime_error("png_create_info_struct error");
-    };
+    }
 
     data.end_info=png_create_info_struct(data.png_ptr);
     if (!data.end_info)
     {
       png_destroy_read_struct(&data.png_ptr, &data.info_ptr, (png_infopp)NULL);
       throw std::runtime_error("png_create_info_struct error");
-    };
+    }
 
     if (setjmp(png_jmpbuf(data.png_ptr)))
     {
       png_destroy_read_struct(&data.png_ptr, &data.info_ptr, &data.end_info);
       throw std::runtime_error(std::string(argv[i]) + ": PNG error");
-    };
+    }
 
     png_init_io(data.png_ptr, pngfile);
     png_set_sig_bytes(data.png_ptr,8);
@@ -536,12 +536,12 @@ bool process_files(int argc, char * argv[])
       //if the width is not a multiple of 8, then the loop creating the and mask later
       //doesn't work properly because it doesn't shift in padding bits
       throw std::runtime_error(std::string(argv[i]) + ": Width must be multiple of 8 and <256. Height must be <256.");
-    };
+    }
 
     if ((color_type & PNG_COLOR_MASK_COLOR)==0)
     {
       throw std::runtime_error(std::string(argv[i]) + ": Grayscale image not supported");
-    };
+    }
 
     if (color_type==PNG_COLOR_TYPE_PALETTE)
     {
@@ -552,13 +552,13 @@ bool process_files(int argc, char * argv[])
       if (convertToIndexed(data, ((color_type & PNG_COLOR_MASK_ALPHA)!=0)))
       {
         fprintf(stderr,"%s: Warning! Color reduction may not be optimal!\nIf the result is not satisfactory, reduce the number of colors\nbefore using png2ico.\n",argv[i]);
-      };
-    };
+      }
+    }
 
     pngdata.push_back(data);
 
     fclose(pngfile);
-  };
+  }
 
 
   if (outfileName==NULL || pngdata.size()<1) {
@@ -568,7 +568,7 @@ bool process_files(int argc, char * argv[])
   FILE* outfile=fopen(outfileName,"wb");
   if (outfile==NULL) {
     throw std::runtime_error(std::string("Cannot open ") + outfileName);
-  };
+  }
 
   writeWord(outfile,0); //idReserved
   writeWord(outfile,1); //idType
@@ -589,7 +589,7 @@ bool process_files(int argc, char * argv[])
     writeDWord(outfile,resSize); //dwBytesInRes
     writeDWord(outfile,offset); //dwImageOffset
     offset+=resSize;
-  };
+  }
 
 
   for(img=pngdata.begin(); img!=pngdata.end(); ++img)
@@ -614,8 +614,8 @@ bool process_files(int argc, char * argv[])
       col[3]=0;
       if (fwrite(col,4,1,outfile)!=1) {
         throw std::runtime_error("Write error");
-      };
-    };
+      }
+    }
 
     png_bytep* row_pointers=png_get_rows(img->png_ptr, img->info_ptr);
     for (int y=img->height-1; y>=0; --y)
@@ -624,9 +624,9 @@ bool process_files(int argc, char * argv[])
       int newLength=pack(row,img->width,img->col_bits);
       if (fwrite(row,newLength,1,outfile)!=1) {
         throw std::runtime_error("Write error");
-      };
+      }
       for(int i=0; i<xorMaskLineLen(*img)-newLength; ++i) writeByte(outfile,0);
-    };
+    }
 
     for (int y=img->height-1; y>=0; --y)
     {
@@ -634,12 +634,12 @@ bool process_files(int argc, char * argv[])
       if (fwrite(transPtr,andMaskLineLen(*img),1,outfile)!=1) {
         throw std::runtime_error("Write error");
       }
-    };
-  };
+    }
+  }
 
   fclose(outfile);
   return true;
-};
+}
 
 int main(int argc, char* argv[])
 {
