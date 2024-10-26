@@ -440,131 +440,8 @@ void usage()
   fprintf(stderr,"USAGE: png2ico icofile [--colors <num>] pngfile1 [pngfile2 ...]\n");
 }
 
-bool process_files(int argc, char * argv[])
+void create_icon(const char * outfileName, const std::vector<png_data> & pngdata)
 {
-  if (argc-2 > word_max)
-  {
-    throw std::runtime_error("Too many PNG files");
-  }
-
-  std::vector<png_data> pngdata;
-
-  static int numColors=256; //static to get rid of longjmp() clobber warning
-  static const char* outfileName=NULL;
-
-  //i is static because used in a setjmp() block
-  for (static int i=1; i<argc; ++i)
-  {
-    if (strcmp(argv[i],"--colors")==0)
-    {
-      ++i;
-      if (i>=argc)
-      {
-        throw std::runtime_error("Number missing after --colors");
-      }
-      char* endptr;
-      long num=strtol(argv[i],&endptr,10);
-      if (*(argv[i])==0 || *endptr!=0 || (num!=2 && num!=16 && num!=256))
-      {
-        throw std::runtime_error("Illegal number of colors");
-      }
-      numColors=num;
-      continue;
-    }
-
-    if (outfileName==NULL) { outfileName=argv[i]; continue; }
-
-    FILE* pngfile=fopen(argv[i],"rb");
-    if (pngfile==NULL)  {
-      throw std::runtime_error(std::string("Cannot open ") + argv[i]);
-    }
-    png_byte header[8];
-    if (fread(header,8,1,pngfile)!=1) {
-      throw std::runtime_error(std::string("Cannot read ") + argv[i]);
-    }
-    if (png_sig_cmp(header,0,8))
-    {
-      throw std::runtime_error(std::string(argv[i]) + ": Not a PNG file");
-    }
-
-    png_data data;
-    data.requested_colors=numColors;
-    for (data.col_bits=1; (1<<data.col_bits)<numColors; ++data.col_bits);
-
-    data.png_ptr=png_create_read_struct
-                   (PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    if (!data.png_ptr)
-    {
-      throw std::runtime_error("png_create_read_struct error");
-    }
-
-    data.info_ptr=png_create_info_struct(data.png_ptr);
-    if (!data.info_ptr)
-    {
-      png_destroy_read_struct(&data.png_ptr, (png_infopp)NULL, (png_infopp)NULL);
-      throw std::runtime_error("png_create_info_struct error");
-    }
-
-    data.end_info=png_create_info_struct(data.png_ptr);
-    if (!data.end_info)
-    {
-      png_destroy_read_struct(&data.png_ptr, &data.info_ptr, (png_infopp)NULL);
-      throw std::runtime_error("png_create_info_struct error");
-    }
-
-    if (setjmp(png_jmpbuf(data.png_ptr)))
-    {
-      png_destroy_read_struct(&data.png_ptr, &data.info_ptr, &data.end_info);
-      throw std::runtime_error(std::string(argv[i]) + ": PNG error");
-    }
-
-    png_init_io(data.png_ptr, pngfile);
-    png_set_sig_bytes(data.png_ptr,8);
-    int trafo=PNG_TRANSFORM_PACKING|PNG_TRANSFORM_STRIP_16|PNG_TRANSFORM_EXPAND;
-    png_read_png(data.png_ptr, data.info_ptr, trafo , NULL);
-
-    int bit_depth, color_type, interlace_type, compression_type, filter_method;
-    png_get_IHDR(data.png_ptr, data.info_ptr, &data.width, &data.height, &bit_depth, &color_type,
-                 &interlace_type, &compression_type, &filter_method);
-
-
-
-    if ( (data.width&7)!=0 || data.width>=256 || data.height>=256)
-    {
-      //I don't know if the following is really a requirement (bmp.txt says that
-      //only 16x16, 32x32 and 64x64 are allowed but that doesn't seem right) but
-      //if the width is not a multiple of 8, then the loop creating the and mask later
-      //doesn't work properly because it doesn't shift in padding bits
-      throw std::runtime_error(std::string(argv[i]) + ": Width must be multiple of 8 and <256. Height must be <256.");
-    }
-
-    if ((color_type & PNG_COLOR_MASK_COLOR)==0)
-    {
-      throw std::runtime_error(std::string(argv[i]) + ": Grayscale image not supported");
-    }
-
-    if (color_type==PNG_COLOR_TYPE_PALETTE)
-    {
-      throw std::runtime_error("This can't happen. PNG_TRANSFORM_EXPAND transforms image to RGB.");
-    }
-    else
-    {
-      if (convertToIndexed(data, ((color_type & PNG_COLOR_MASK_ALPHA)!=0)))
-      {
-        fprintf(stderr,"%s: Warning! Color reduction may not be optimal!\nIf the result is not satisfactory, reduce the number of colors\nbefore using png2ico.\n",argv[i]);
-      }
-    }
-
-    pngdata.push_back(data);
-
-    fclose(pngfile);
-  }
-
-
-  if (outfileName==NULL || pngdata.size()<1) {
-    return false;
-  }
-
   FILE* outfile=fopen(outfileName,"wb");
   if (outfile==NULL) {
     throw std::runtime_error(std::string("Cannot open ") + outfileName);
@@ -638,6 +515,133 @@ bool process_files(int argc, char * argv[])
   }
 
   fclose(outfile);
+}
+
+png_data load_file(const char * filename, const int numColors)
+{
+  FILE* pngfile=fopen(filename,"rb");
+  if (pngfile==NULL)  {
+    throw std::runtime_error(std::string("Cannot open ") + filename);
+  }
+  png_byte header[8];
+  if (fread(header,8,1,pngfile)!=1) {
+    throw std::runtime_error(std::string("Cannot read ") + filename);
+  }
+  if (png_sig_cmp(header,0,8))
+  {
+    throw std::runtime_error(std::string(filename) + ": Not a PNG file");
+  }
+
+  png_data data;
+  data.requested_colors=numColors;
+  for (data.col_bits=1; (1<<data.col_bits)<numColors; ++data.col_bits);
+
+  data.png_ptr=png_create_read_struct
+                  (PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+  if (!data.png_ptr)
+  {
+    throw std::runtime_error("png_create_read_struct error");
+  }
+
+  data.info_ptr=png_create_info_struct(data.png_ptr);
+  if (!data.info_ptr)
+  {
+    png_destroy_read_struct(&data.png_ptr, (png_infopp)NULL, (png_infopp)NULL);
+    throw std::runtime_error("png_create_info_struct error");
+  }
+
+  data.end_info=png_create_info_struct(data.png_ptr);
+  if (!data.end_info)
+  {
+    png_destroy_read_struct(&data.png_ptr, &data.info_ptr, (png_infopp)NULL);
+    throw std::runtime_error("png_create_info_struct error");
+  }
+
+  if (setjmp(png_jmpbuf(data.png_ptr)))
+  {
+    png_destroy_read_struct(&data.png_ptr, &data.info_ptr, &data.end_info);
+    throw std::runtime_error(std::string(filename) + ": PNG error");
+  }
+
+  png_init_io(data.png_ptr, pngfile);
+  png_set_sig_bytes(data.png_ptr,8);
+  int trafo=PNG_TRANSFORM_PACKING|PNG_TRANSFORM_STRIP_16|PNG_TRANSFORM_EXPAND;
+  png_read_png(data.png_ptr, data.info_ptr, trafo , NULL);
+
+  int bit_depth, color_type, interlace_type, compression_type, filter_method;
+  png_get_IHDR(data.png_ptr, data.info_ptr, &data.width, &data.height, &bit_depth, &color_type,
+                &interlace_type, &compression_type, &filter_method);
+
+
+
+  if ( (data.width&7)!=0 || data.width>=256 || data.height>=256)
+  {
+    //I don't know if the following is really a requirement (bmp.txt says that
+    //only 16x16, 32x32 and 64x64 are allowed but that doesn't seem right) but
+    //if the width is not a multiple of 8, then the loop creating the and mask later
+    //doesn't work properly because it doesn't shift in padding bits
+    throw std::runtime_error(std::string(filename) + ": Width must be multiple of 8 and <256. Height must be <256.");
+  }
+
+  if ((color_type & PNG_COLOR_MASK_COLOR)==0)
+  {
+    throw std::runtime_error(std::string(filename) + ": Grayscale image not supported");
+  }
+
+  if (color_type==PNG_COLOR_TYPE_PALETTE)
+  {
+    throw std::runtime_error("This can't happen. PNG_TRANSFORM_EXPAND transforms image to RGB.");
+  }
+  else
+  {
+    if (convertToIndexed(data, ((color_type & PNG_COLOR_MASK_ALPHA)!=0)))
+    {
+      fprintf(stderr,"%s: Warning! Color reduction may not be optimal!\nIf the result is not satisfactory, reduce the number of colors\nbefore using png2ico.\n",filename);
+    }
+  }
+  fclose(pngfile);
+  return data;
+}
+
+bool parse_args(int argc, char * argv[])
+{
+  if (argc-2 > word_max)
+  {
+    throw std::runtime_error("Too many PNG files");
+  }
+
+  std::vector<png_data> pngdata;
+
+  int numColors = 256;
+  const char * outfileName = nullptr;
+
+  for (int i=1; i<argc; ++i)
+  {
+    if (strcmp(argv[i],"--colors")==0)
+    {
+      ++i;
+      if (i>=argc)
+      {
+        throw std::runtime_error("Number missing after --colors");
+      }
+      char* endptr;
+      long num=strtol(argv[i],&endptr,10);
+      if (*(argv[i])==0 || *endptr!=0 || (num!=2 && num!=16 && num!=256))
+      {
+        throw std::runtime_error("Illegal number of colors");
+      }
+      numColors=num;
+      continue;
+    }
+
+    if (outfileName==NULL) { outfileName=argv[i]; continue; }
+
+    pngdata.emplace_back(load_file(argv[i], numColors));
+  }
+  if (outfileName==NULL || pngdata.size()<1) {
+    return false;
+  }
+  create_icon(outfileName, pngdata);
   return true;
 }
 
@@ -648,7 +652,7 @@ int main(int argc, char* argv[])
     return 1;
   }
   try {
-    if (!process_files(argc, argv)) {
+    if (!parse_args(argc, argv)) {
       usage();
       return 1;
     }
