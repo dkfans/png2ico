@@ -57,20 +57,10 @@ Notes about transparent and inverted pixels:
 #include <vector>
 #include <climits>
 #include <cstring>
-
-#if __GNUC__ > 2
-#include <ext/hash_map>
-#else
-#include <hash_map>
-#endif
-
+#include <unordered_map>
 #include <png.h>
 
 #include "VERSION"
-
-using namespace std;
-namespace __gnu_cxx{};
-using namespace __gnu_cxx;
 
 const int word_max=65535;
 const int transparency_threshold=196;
@@ -168,7 +158,7 @@ bool convertToIndexed(png_data& img, bool hasAlpha)
   //if an alpha channel is present, set all transparent pixels to RGBA (0,0,0,0)
   //transparent pixels will already be mapped to palette entry 0, non-transparent
   //pixels will not get a mapping yet (-1)
-  hash_map<unsigned int,signed int> mapQuadToPalEntry;
+  std::unordered_map<unsigned int,signed int> mapQuadToPalEntry;
   png_bytep* row_pointers=png_get_rows(img.png_ptr, img.info_ptr);
 
   for (int y=img.height-1; y>=0; --y)
@@ -231,11 +221,11 @@ bool convertToIndexed(png_data& img, bool hasAlpha)
     unsigned int mostDifferentQuad=0;
     int mdqMinDist=-1; //smallest distance to an entry in the palette for mostDifferentQuad
     int mdqDistSum=-1; //sum over all distances to palette entries for mostDifferentQuad
-    hash_map<unsigned int,signed int>::iterator stop=mapQuadToPalEntry.end();
-    hash_map<unsigned int,signed int>::iterator iter=mapQuadToPalEntry.begin();
+    std::unordered_map<unsigned int,signed int>::iterator stop=mapQuadToPalEntry.end();
+    std::unordered_map<unsigned int,signed int>::iterator iter=mapQuadToPalEntry.begin();
     while(iter!=stop)
     {
-      hash_map<unsigned int,signed int>::value_type& mapping=*iter++;
+      std::unordered_map<unsigned int,signed int>::value_type& mapping=*iter++;
       if (mapping.second<0)
       {
         unsigned int quad=mapping.first;
@@ -278,11 +268,11 @@ bool convertToIndexed(png_data& img, bool hasAlpha)
   };
 
   //Now map all yet unmapped colors to the most appropriate palette entry
-  hash_map<unsigned int,signed int>::iterator stop=mapQuadToPalEntry.end();
-  hash_map<unsigned int,signed int>::iterator iter=mapQuadToPalEntry.begin();
+  std::unordered_map<unsigned int,signed int>::iterator stop=mapQuadToPalEntry.end();
+  std::unordered_map<unsigned int,signed int>::iterator iter=mapQuadToPalEntry.begin();
   while(iter!=stop)
   {
-    hash_map<unsigned int,signed int>::value_type& mapping=*iter++;
+    std::unordered_map<unsigned int,signed int>::value_type& mapping=*iter++;
     if (mapping.second<0)
     {
       unsigned int quad=mapping.first;
@@ -314,11 +304,11 @@ bool convertToIndexed(png_data& img, bool hasAlpha)
     int green=0;
     int blue=0;
     int numMappings=0;
-    hash_map<unsigned int,signed int>::iterator stop=mapQuadToPalEntry.end();
-    hash_map<unsigned int,signed int>::iterator iter=mapQuadToPalEntry.begin();
+    std::unordered_map<unsigned int,signed int>::iterator stop=mapQuadToPalEntry.end();
+    std::unordered_map<unsigned int,signed int>::iterator iter=mapQuadToPalEntry.begin();
     while(iter!=stop)
     {
-      hash_map<unsigned int,signed int>::value_type& mapping=*iter++;
+      std::unordered_map<unsigned int,signed int>::value_type& mapping=*iter++;
       if (mapping.second==i)
       {
         unsigned int quad=mapping.first;
@@ -344,7 +334,7 @@ bool convertToIndexed(png_data& img, bool hasAlpha)
   iter=mapQuadToPalEntry.begin();
   while(iter!=stop)
   {
-    hash_map<unsigned int,signed int>::value_type& mapping=*iter++;
+    std::unordered_map<unsigned int,signed int>::value_type& mapping=*iter++;
     unsigned int quad=mapping.first;
     if ((quad>>24)!=0) //if color is not transparent
     {
@@ -454,7 +444,7 @@ int main(int argc, char* argv[])
     exit(1);
   };
 
-  vector<png_data> pngdata;
+  std::vector<png_data> pngdata;
 
   static int numColors=256; //static to get rid of longjmp() clobber warning
   static const char* outfileName=NULL;
@@ -585,7 +575,7 @@ int main(int argc, char* argv[])
 
   int offset=6+pngdata.size()*16;
 
-  vector<png_data>::const_iterator img;
+  std::vector<png_data>::const_iterator img;
   for(img=pngdata.begin(); img!=pngdata.end(); ++img)
   {
     writeByte(outfile,img->width); //bWidth
