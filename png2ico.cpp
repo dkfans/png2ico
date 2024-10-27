@@ -18,10 +18,14 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
+#include <cstdarg>
 #include <vector>
 #include <string>
 #include <fstream>
 #include <stdexcept>
+#include <memory>
+#include <filesystem>
+#include <spng.h>
 #include "VERSION"
 
 void usage()
@@ -29,6 +33,27 @@ void usage()
 	fprintf(stderr,version"\n");
 	fprintf(stderr,"USAGE: png2ico icofile [--colors <num>] pngfile1 [pngfile2 ...]\n");
 }
+
+struct formatted_error : std::exception {
+
+	formatted_error(const char * fmt, ...) /* __attribute__((format(printf, 1, 2))) */
+	{
+		va_list args;
+		va_start(args, fmt);
+		const auto len = vsnprintf(nullptr, 0, fmt, args);
+		va_end(args);
+		m_reason.resize(len + 1);
+		va_start(args, fmt);
+		vsnprintf(m_reason.data(), m_reason.size(), fmt, args);
+		va_end(args);
+	}
+
+	const char * what() const noexcept override {
+		return m_reason.data();
+	}
+
+	std::vector<char> m_reason;
+};
 
 auto parse_args(int argc, char * argv[])
 {
@@ -40,7 +65,7 @@ auto parse_args(int argc, char * argv[])
 			// eat color parameter for compatibility
 			++i;
 			if (i >= argc) {
-				throw std::runtime_error("Number missing after --colors");
+				throw formatted_error("Number missing after --colors");
 			}
 			continue;
 		} else if (!outfileName) {
@@ -72,73 +97,136 @@ struct ICONDIRECTORY {
 };
 #pragma pack()
 
-int create_icon(const char * outfileName, const std::vector<const char *> & inputs)
+struct spng_deleter {
+	void operator()(spng_ctx * ctx) const {
+		spng_ctx_free(ctx);
+	}
+};
+
+struct file_deleter {
+	void operator()(FILE * file) const {
+		fclose(file);
+	}
+};
+
+using spng_ctx_ptr = std::unique_ptr<spng_ctx, spng_deleter>;
+using file_ptr = std::unique_ptr<FILE, file_deleter>;
+
+auto get_dimensions(const char * filename)
 {
-	std::ofstream out;
-	out.exceptions(std::ios::badbit);
-	try {
-		out.open(outfileName, std::ios::binary | std::ios::out | std::ios::trunc);
-	} catch (const std::ios::failure & e) {
-		fprintf(stderr, "Cannot open %s: %s\n", outfileName, e.what());
-		return 1;
+	file_ptr file(fopen(filename, "rb"));
+	if (!file) {
+		throw formatted_error("Cannot open %s: %s", filename, strerror(errno));
 	}
-	// write icon directory header
-	const ICONDIR icondir = { 0, 1, uint16_t(inputs.size()) };
-	try {
-		out.write(reinterpret_cast<const char *>(&icondir), sizeof(ICONDIR));
-	} catch (const std::ios::failure & e) {
-		fprintf(stderr, "Cannot write to %s: %s\n", outfileName, e.what());
-		return 1;
+	spng_ctx_ptr ctx(spng_ctx_new(0));
+	if (!ctx) {
+		throw formatted_error("Cannot create spng context");
+	} else if (const auto res = spng_set_png_file(ctx.get(), file.get()); res != 0) {
+		throw formatted_error("Cannot attach file of %s: %s", filename, spng_strerror(res));
 	}
-	// write icon entry headers
+	spng_ihdr header;
+	if (const auto res = spng_get_ihdr(ctx.get(), &header); res != 0) {
+		throw formatted_error("Cannot read PNG header of %s: %s", filename, spng_strerror(res));
+	}
+	return std::make_pair(
+		header.width <= 255 ? header.width : 0,
+		header.height <= 255 ? header.height : 0
+	);
+}
+
+auto make_ifstream(const char * filename)
+{
+	try {
+		std::ifstream stream;
+		stream.exceptions(std::ios::badbit);
+		stream.open(filename, std::ios::binary | std::ios::in);
+		return stream;
+	} catch (const std::exception & e) {
+		throw formatted_error("Cannot open %s: %s", filename, e.what());
+	}
+}
+
+auto make_ofstream(const char * filename)
+{
+	try {
+		std::ofstream stream;
+		stream.exceptions(std::ios::badbit);
+		stream.open(filename, std::ios::binary | std::ios::out | std::ios::trunc);
+		return stream;
+	} catch (const std::exception & e) {
+		throw formatted_error("Cannot open %s: %s", filename, e.what());
+	}
+}
+
+auto write_ICONDIR(const char * filename, std::ostream & stream, uint16_t count)
+{
+	const ICONDIR icondir = { 0, 1, count };
+	try {
+		stream.write(reinterpret_cast<const char *>(&icondir), sizeof(ICONDIR));
+	} catch (const std::exception & e) {
+		throw formatted_error("Cannot write to %s: %s", filename, e.what());
+	}
+}
+
+auto get_size(const char * filename)
+{
+	try {
+		return std::filesystem::file_size(filename);
+	} catch (const std::exception & e) {
+		throw formatted_error("Cannot get size of %s: %s", filename, e.what());
+	}
+}
+
+auto write_ICONDIRECTORY(const char * filename, std::ostream & stream, uint8_t width, uint8_t height, uint32_t size, uint32_t offset)
+{
+	const ICONDIRECTORY identry = { width, height, 0, 0, 1, 24, size, offset };
+	try {
+		stream.write(reinterpret_cast<const char *>(&identry), sizeof(identry));
+	} catch (const std::exception & e) {
+		throw formatted_error("Cannot write to %s: %s", filename, e.what());
+	}
+}
+
+auto read(const char * filename, std::istream & stream, std::vector<char> & buffer)
+{
+	try {
+		stream.read(buffer.data(), buffer.size());
+		return stream.gcount();
+	} catch (const std::exception & e) {
+		throw formatted_error("Cannot read from %s: %s", filename, e.what());
+	}
+}
+
+auto write(const char * filename, std::ostream & stream, const char * buffer, size_t amount)
+{
+	try {
+		stream.write(buffer, amount);
+	} catch (const std::exception & e) {
+		throw formatted_error("Cannot write to %s: %s", filename, e.what());
+	}
+}
+
+void create_icon(const char * outfileName, const std::vector<const char *> & inputs)
+{
+	auto out = make_ofstream(outfileName);
+	// write directory
+	write_ICONDIR(outfileName, out, inputs.size());
 	size_t offset = sizeof(ICONDIR) + (sizeof(ICONDIRECTORY) * inputs.size());
 	for (const auto infileName : inputs) {
-		std::ifstream in;
-		in.exceptions(std::ios::badbit);
-		try {
-			in.open(infileName, std::ios::binary | std::ios::in | std::ios::ate);
-		} catch (const std::ios::failure & e) {
-			fprintf(stderr, "Cannot open %s: %s\n", infileName, e.what());
-			return 1;
-		}
-		const auto size = in.tellg();
-		// lie a bit, claim all our icons are compressed and 24-bpp
-		const ICONDIRECTORY identry = { 0, 0, 0, 0, 1, 24, uint32_t(size), uint32_t(offset) };
+		const auto size = get_size(infileName);
+		const auto [width, height] = get_dimensions(infileName);
+		write_ICONDIRECTORY(infileName, out, width, height, size, offset);
 		offset += size;
-		try {
-			out.write(reinterpret_cast<const char *>(&identry), sizeof(identry));
-		} catch (const std::ios::failure & e) {
-			fprintf(stderr, "Cannot write to %s: %s\n", outfileName, e.what());
-			return 1;
-		}
 	}
 	// write icons
 	for (const auto infileName : inputs) {
-		std::ifstream in;
-		in.exceptions(std::ios::badbit);
-		try {
-			in.open(infileName, std::ios::binary | std::ios::in);
-		} catch (const std::ios::failure & e) {
-			fprintf(stderr, "Cannot open %s: %s\n", infileName, e.what());
-			return 1;
-		}
-		char buffer[8192];
+		auto in = make_ifstream(infileName);
+		std::vector<char> buffer(8192);
 		while (!in.eof()) {
-			try {
-				in.read(buffer, sizeof(buffer));
-			} catch (const std::ios::failure & e) {
-				fprintf(stderr, "Cannot read from %s: %s\n", infileName, e.what());
-				return 1;
-			}
-			try {
-				out.write(buffer, in.gcount());
-			} catch (const std::ios::failure & e) {
-				fprintf(stderr, "Cannot write to %s: %s\n", outfileName, e.what());
-				return 1;
-			}
+			const auto len = read(infileName, in, buffer);
+			write(outfileName, out, buffer.data(), len);
 		}
 	}
-	return 0;
 }
 
 int main(int argc, char* argv[])
@@ -152,7 +240,8 @@ int main(int argc, char* argv[])
 			usage();
 			throw std::runtime_error("No input files specified");
 		}
-		return create_icon(outfileName, inputs);
+		create_icon(outfileName, inputs);
+		return 0;
 	} catch (const std::exception & e) {
 		fprintf(stderr, "%s\n", e.what());
 	}
